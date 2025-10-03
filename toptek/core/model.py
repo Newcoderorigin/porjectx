@@ -92,7 +92,7 @@ def calibrate_classifier(
 
     X_cal, y_cal = calibration_data
     pipeline = load_model(model_path)
-    calibrator = CalibratedClassifierCV(base_estimator=pipeline, method=method, cv="prefit")
+    calibrator = CalibratedClassifierCV(estimator=pipeline, method=method, cv="prefit")
     calibrator.fit(X_cal, y_cal)
     target_path = output_path or model_path.with_name(f"{model_path.stem}_calibrated.pkl")
     with target_path.open("wb") as handle:

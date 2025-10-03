@@ -46,8 +46,8 @@ def run_cli(args: argparse.Namespace, configs: Dict[str, Dict[str, object]], pat
     forward_return = df["close"].pct_change().shift(-1)
     y_series = (forward_return.loc[feature_frame.index] > 0).astype(int)
     aligned = pd.concat({"X": feature_frame, "y": y_series}, axis=1).dropna()
-    X = aligned["X"].to_numpy()
-    y = aligned["y"].to_numpy()
+    X = aligned["X"].copy()
+    y = aligned["y"].copy()
 
     if args.cli == "train":
         result = model.train_classifier(X, y, models_dir=paths.models)

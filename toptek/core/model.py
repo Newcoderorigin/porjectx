@@ -10,7 +10,7 @@ from __future__ import annotations
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -50,7 +50,15 @@ def _clean_xy(
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Align feature matrix and labels while dropping degenerate columns."""
 
-    X_df = pd.DataFrame(X).copy()
+    if isinstance(X, pd.DataFrame):
+        X_df = X.copy()
+    else:
+        X_arr = np.asarray(X)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(-1, 1)
+        columns = [f"feature_{idx}" for idx in range(X_arr.shape[1])]
+        X_df = pd.DataFrame(X_arr, columns=columns)
+
     y_s = pd.Series(y).copy()
 
     mask_valid_y = y_s.notna().values
@@ -62,10 +70,10 @@ def _clean_xy(
     X_df = X_df.loc[:, nunique > 1]
     if X_df.empty:
         raise ValueError("No usable features remain after cleaning")
-    return X_df, y_s
+    return X_df.reset_index(drop=True), y_s.reset_index(drop=True)
 
 
-def _build_preprocessor(num_features: int) -> ColumnTransformer:
+def _build_preprocessor(columns: Sequence[str]) -> ColumnTransformer:
     """Construct the preprocessing pipeline used by all classifiers."""
 
     num_pipe = Pipeline(
@@ -74,7 +82,7 @@ def _build_preprocessor(num_features: int) -> ColumnTransformer:
             ("scale", StandardScaler(with_mean=False)),
         ]
     )
-    return ColumnTransformer([("num", num_pipe, list(range(num_features)))], remainder="drop")
+    return ColumnTransformer([("num", num_pipe, list(columns))], remainder="drop")
 
 
 def _select_estimator(model_type: str) -> object:
@@ -111,7 +119,7 @@ def train_classifier(
     """
 
     X_df, y_s = _clean_xy(X, y)
-    pre = _build_preprocessor(X_df.shape[1])
+    pre = _build_preprocessor(X_df.columns)
     estimator = _select_estimator(model_type)
     pipeline = Pipeline(steps=[("pre", pre), ("clf", estimator)])
 

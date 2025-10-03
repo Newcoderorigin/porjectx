@@ -400,7 +400,7 @@ class TrainTab(EliteTab):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.last_result: model.TrainResult | None = None
-        self.last_training_data: tuple[np.ndarray, np.ndarray] | None = None
+        self.last_training_data: tuple[pd.DataFrame, pd.Series] | None = None
         self.last_calibration: model.CalibrationResult | None = None
         self._build()
 
@@ -465,8 +465,8 @@ class TrainTab(EliteTab):
             forward_return = df["close"].pct_change().shift(-1)
             y_series = (forward_return.loc[feature_frame.index] > 0).astype(int)
             aligned = pd.concat({"X": feature_frame, "y": y_series}, axis=1).dropna()
-            X = aligned["X"].to_numpy()
-            y = aligned["y"].to_numpy()
+            X = aligned["X"].copy()
+            y = aligned["y"].copy()
             self.last_training_data = (X, y)
             self.last_calibration = None
             result = model.train_classifier(

@@ -23,6 +23,22 @@ class BaseTab(ttk.Frame):
         self.paths = paths
         self.logger = utils.build_logger(self.__class__.__name__)
 
+    def log_event(self, message: str, *, level: str = "info") -> None:
+        """Log an event using the tab's logger.
+
+        Args:
+            message: Event description.
+            level: Logging level name to dispatch (defaults to ``info``).
+        """
+
+        log_method = getattr(self.logger, level.lower(), self.logger.info)
+        log_method(message)
+
+    def update_section(self, section: str, updates: Dict[str, object]) -> None:
+        """Update the configuration state for *section* with *updates*."""
+
+        self.configs.setdefault(section, {}).update(updates)
+
 
 class LoginTab(BaseTab):
     """Login tab that manages .env configuration."""
@@ -213,12 +229,38 @@ class TrainTab(BaseTab):
         y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
         result = model.train_classifier(X, y, model_type=self.model_type.get(), models_dir=self.paths.models)
         calibrate_report = "skipped"
+        calibration_failed = False
         if self.calibrate_var.get() and len(X) > 60:
             cal_size = max(60, int(len(X) * 0.2))
             X_cal = X[-cal_size:]
             y_cal = y[-cal_size:]
-            calibrated_path = model.calibrate_classifier(result.model_path, (X_cal, y_cal))
-            calibrate_report = f"calibrated → {calibrated_path.name}"
+            try:
+                calibrated_path = model.calibrate_classifier(result.model_path, (X_cal, y_cal))
+            except (ValueError, RuntimeError) as exc:
+                calibrate_report = f"calibration failed: {exc}"
+                calibration_failed = True
+                self.log_event(
+                    f"Calibration failed for {result.model_path.name}: {exc}",
+                    level="warning",
+                )
+                self.status.config(
+                    text="Calibration skipped due to data quality. Review logs for details.",
+                    foreground="#b91c1c",
+                )
+                messagebox.showwarning(
+                    "Calibration warning",
+                    (
+                        "Probability calibration failed with the current sample. "
+                        "The model artefact remains uncalibrated.\n\n"
+                        f"Details: {exc}"
+                    ),
+                )
+            else:
+                calibrate_report = f"calibrated → {calibrated_path.name}"
+                self.log_event(
+                    f"Calibration completed for {result.model_path.name} → {calibrated_path.name}",
+                    level="info",
+                )
         self.output.delete("1.0", tk.END)
         payload = {
             "model": self.model_type.get(),
@@ -227,7 +269,9 @@ class TrainTab(BaseTab):
             "calibration": calibrate_report,
         }
         self.output.insert(tk.END, json_dumps(payload))
-        self.status.config(text="Model artefact refreshed. Continue to Backtest ▶")
+        self.update_section("training", payload)
+        if not calibration_failed:
+            self.status.config(text="Model artefact refreshed. Continue to Backtest ▶", foreground="")
 
 
 class BacktestTab(BaseTab):

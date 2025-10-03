@@ -1,0 +1,14 @@
+default_timeframe: 5m
+lookback_minutes: 1440
+feature_set:
+  - rsi_14
+  - ema_fast_12
+  - ema_slow_26
+  - macd
+  - atr_14
+  - bollinger_perc_20
+  - roc_10
+  - obv
+  - adx_14
+  - donchian_width_20
+  - volatility_parkinson

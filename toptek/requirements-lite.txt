@@ -1,0 +1,7 @@
+httpx
+python-dotenv
+pyyaml
+numpy
+ta
+scikit-learn
+pandas

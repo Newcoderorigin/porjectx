@@ -1,0 +1,10 @@
+httpx
+python-dotenv
+pyyaml
+numpy
+ta
+scikit-learn
+pandas
+ttkbootstrap
+pillow
+matplotlib

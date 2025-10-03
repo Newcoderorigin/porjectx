@@ -1,0 +1,4 @@
+polling_interval_seconds: 5
+cache_directory: data/cache
+models_directory: models
+log_level: INFO

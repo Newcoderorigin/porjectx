@@ -34,11 +34,13 @@ class AppPaths:
         root: Base directory for the project.
         cache: Directory path for cached data files.
         models: Directory path for persisted models.
+        user_data: Directory path for long-lived user state and history.
     """
 
     root: Path
     cache: Path
     models: Path
+    user_data: Path
 
 
 def build_logger(name: str, level: str = "INFO") -> logging.Logger:
@@ -84,7 +86,7 @@ def load_yaml(path: Path) -> Dict[str, Any]:
 def ensure_directories(paths: AppPaths) -> None:
     """Ensure application directories exist."""
 
-    for directory in (paths.cache, paths.models):
+    for directory in (paths.cache, paths.models, paths.user_data):
         directory.mkdir(parents=True, exist_ok=True)
 
 
@@ -119,4 +121,5 @@ def build_paths(root: Path, app_config: Dict[str, Any]) -> AppPaths:
 
     cache_dir = root / app_config.get("cache_directory", "data/cache")
     models_dir = root / app_config.get("models_directory", "models")
-    return AppPaths(root=root, cache=cache_dir, models=models_dir)
+    user_dir = root / app_config.get("user_data_directory", "data/user")
+    return AppPaths(root=root, cache=cache_dir, models=models_dir, user_data=user_dir)

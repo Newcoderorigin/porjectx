@@ -10,9 +10,12 @@ from typing import Dict, Tuple
 import numpy as np
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 
 @dataclass
@@ -34,12 +37,27 @@ def train_classifier(
 ) -> TrainResult:
     """Train a basic classifier and persist it to ``models_dir``."""
 
+    X = np.asarray(X, dtype=float)
+    X = np.where(np.isfinite(X), X, np.nan)
+    y = np.asarray(y)
+
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True, random_state=42)
 
     if model_type == "logistic":
-        model = LogisticRegression(max_iter=1000)
+        model = Pipeline(
+            [
+                ("imputer", SimpleImputer(strategy="median")),
+                ("scaler", StandardScaler()),
+                ("clf", LogisticRegression(max_iter=1000)),
+            ]
+        )
     elif model_type == "gbm":
-        model = GradientBoostingClassifier()
+        model = Pipeline(
+            [
+                ("imputer", SimpleImputer(strategy="median")),
+                ("clf", GradientBoostingClassifier()),
+            ]
+        )
     else:
         raise ValueError("Unknown model type")
 
@@ -92,7 +110,7 @@ def calibrate_classifier(
 
     X_cal, y_cal = calibration_data
     pipeline = load_model(model_path)
-    calibrator = CalibratedClassifierCV(base_estimator=pipeline, method=method, cv="prefit")
+    calibrator = CalibratedClassifierCV(estimator=pipeline, method=method, cv="prefit")
     calibrator.fit(X_cal, y_cal)
     target_path = output_path or model_path.with_name(f"{model_path.stem}_calibrated.pkl")
     with target_path.open("wb") as handle:

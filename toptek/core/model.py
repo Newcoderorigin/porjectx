@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 import numpy as np
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
@@ -63,4 +64,40 @@ def load_model(model_path: Path):
         return pickle.load(handle)
 
 
-__all__ = ["train_classifier", "load_model", "TrainResult"]
+def calibrate_classifier(
+    model_path: Path,
+    calibration_data: Tuple[np.ndarray, np.ndarray],
+    *,
+    method: str = "sigmoid",
+    output_path: Path | None = None,
+) -> Path:
+    """Calibrate a pre-trained classifier using hold-out data.
+
+    Parameters
+    ----------
+    model_path:
+        Location of the previously fitted classifier pipeline.
+    calibration_data:
+        Tuple containing the feature matrix and labels reserved for calibration.
+    method:
+        Calibration method supported by :class:`CalibratedClassifierCV` (``sigmoid`` or ``isotonic``).
+    output_path:
+        Optional override for where the calibrated model should be persisted.
+
+    Returns
+    -------
+    Path
+        Filesystem path to the calibrated model artefact.
+    """
+
+    X_cal, y_cal = calibration_data
+    pipeline = load_model(model_path)
+    calibrator = CalibratedClassifierCV(base_estimator=pipeline, method=method, cv="prefit")
+    calibrator.fit(X_cal, y_cal)
+    target_path = output_path or model_path.with_name(f"{model_path.stem}_calibrated.pkl")
+    with target_path.open("wb") as handle:
+        pickle.dump(calibrator, handle)
+    return target_path
+
+
+__all__ = ["train_classifier", "load_model", "TrainResult", "calibrate_classifier"]

@@ -400,6 +400,8 @@ class TrainTab(EliteTab):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.last_result: model.TrainResult | None = None
+        self.last_training_data: tuple[np.ndarray, np.ndarray] | None = None
+        self.last_calibration: model.CalibrationResult | None = None
         self._build()
 
     def _build(self) -> None:
@@ -417,15 +419,27 @@ class TrainTab(EliteTab):
         self.horizon_var = tk.IntVar(value=5)
         tb.Spinbox(control, from_=1, to=60, textvariable=self.horizon_var, width=6).grid(row=1, column=1, sticky="w", pady=4)
 
-        tb.Label(control, text="Probability threshold", bootstyle="secondary").grid(row=2, column=0, sticky="w")
+        tb.Label(control, text="Model type", bootstyle="secondary").grid(row=2, column=0, sticky="w")
+        self.model_type_var = tk.StringVar(value="logistic")
+        model_combo = tb.Combobox(
+            control,
+            textvariable=self.model_type_var,
+            values=("logistic", "gbm"),
+            state="readonly",
+            width=12,
+        )
+        model_combo.grid(row=2, column=1, sticky="w", pady=4)
+        HelpIcon(control, "Choose between logistic regression or gradient boosting.").grid(row=2, column=2, padx=6)
+
+        tb.Label(control, text="Probability threshold", bootstyle="secondary").grid(row=3, column=0, sticky="w")
         self.threshold_var = tk.DoubleVar(value=0.65)
         threshold_entry = tb.Entry(control, textvariable=self.threshold_var, width=8)
-        threshold_entry.grid(row=2, column=1, sticky="w", pady=4)
-        HelpIcon(control, "Signals trigger when probability exceeds this value.").grid(row=2, column=2, padx=6)
+        threshold_entry.grid(row=3, column=1, sticky="w", pady=4)
+        HelpIcon(control, "Signals trigger when probability exceeds this value.").grid(row=3, column=2, padx=6)
         self.coach_targets["train"] = None  # placeholder updated later
 
         buttons = tb.Frame(control)
-        buttons.grid(row=3, column=0, columnspan=3, pady=(12, 0), sticky="w")
+        buttons.grid(row=4, column=0, columnspan=3, pady=(12, 0), sticky="w")
         self.train_btn = tb.Button(buttons, text="Run Train", bootstyle="primary", command=self._train_model)
         self.train_btn.pack(side=LEFT)
         self.coach_targets["train"] = self.train_btn
@@ -441,6 +455,8 @@ class TrainTab(EliteTab):
         self.metric_auc.pack(fill=X)
         self.metric_samples = MetricRow(self.metrics_box, "Samples/Features")
         self.metric_samples.pack(fill=X)
+        self.metric_brier = MetricRow(self.metrics_box, "Brier score")
+        self.metric_brier.pack(fill=X)
 
     def _train_model(self) -> None:
         try:
@@ -451,7 +467,15 @@ class TrainTab(EliteTab):
             aligned = pd.concat({"X": feature_frame, "y": y_series}, axis=1).dropna()
             X = aligned["X"].to_numpy()
             y = aligned["y"].to_numpy()
-            result = model.train_classifier(X, y, models_dir=self.paths.models, threshold=self.threshold_var.get())
+            self.last_training_data = (X, y)
+            self.last_calibration = None
+            result = model.train_classifier(
+                X,
+                y,
+                models_dir=self.paths.models,
+                threshold=self.threshold_var.get(),
+                model_type=self.model_type_var.get(),
+            )
         except Exception as exc:  # pragma: no cover - GUI feedback path
             import traceback
 
@@ -464,10 +488,39 @@ class TrainTab(EliteTab):
         self.metric_samples.set(
             f"{result.metrics['n_samples']} samples / {result.metrics['n_features']} features"
         )
+        self.metric_brier.set(f"{result.metrics['brier_score']:.3f}")
+        bins = "\n".join(
+            f"Pred {pred:.2f} → Obs {obs:.2f}" for pred, obs in result.calibration_curve
+        )
+        if bins:
+            self.show_details_popup("Calibration (hold-out)", bins)
         self.toast.success("Model trained successfully")
 
     def _calibrate(self) -> None:
-        self.toast.info("Calibration placeholder complete")
+        if not self.last_result or not self.last_training_data:
+            self.toast.warning("Train a model first")
+            return
+        X, y = self.last_training_data
+        try:
+            calib = model.calibrate_classifier(
+                X,
+                y,
+                base_model_path=self.last_result.model_path,
+                models_dir=self.paths.models,
+            )
+        except Exception:
+            import traceback
+
+            self.toast.error("Calibration failed (see details)")
+            self.show_details_popup("Calibration Error", traceback.format_exc())
+            return
+        self.last_calibration = calib
+        self.metric_brier.set(f"{calib.metrics['brier_score']:.3f}")
+        details = "\n".join(
+            f"Pred {pred:.2f} → Obs {obs:.2f}" for pred, obs in calib.calibration_curve
+        )
+        self.show_details_popup("Calibration curve", details)
+        self.toast.success(f"Calibrated model saved to {calib.model_path.name}")
 
     def _save_model(self) -> None:
         if not self.last_result:

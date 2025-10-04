@@ -1,0 +1,31 @@
+appearance:
+  theme: dark
+  accent: violet
+shell:
+  symbol: ES=F
+  interval: 5m
+  research_bars: 240
+  lookback_bars: 480
+  calibrate: true
+  model: logistic
+  simulation_bars: 720
+  playbook: momentum
+chart:
+  fps: 12
+  max_points: 180
+  price_decimals: 2
+status:
+  login:
+    idle: "Awaiting verification"
+    saved: "Saved. Run verification to confirm access."
+    verified: "All keys present. Proceed to Research ▶"
+  training:
+    idle: "Awaiting training run"
+    success: "Model artefact refreshed. Continue to Backtest ▶"
+  backtest:
+    idle: "No simulations yet"
+    success: "Sim complete. If expectancy holds, draft a manual trade plan ▶"
+  guard:
+    pending: "Topstep Guard: pending review"
+    intro: "Manual execution only. Awaiting guard refresh..."
+    defensive_warning: "DEFENSIVE_MODE active. Stand down and review your journal before trading."

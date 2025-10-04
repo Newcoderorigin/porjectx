@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
-from typing import Dict
+from typing import Any, Dict, TypeVar, cast
 
 import numpy as np
 
@@ -15,6 +15,9 @@ from core.data import sample_dataframe
 from core.utils import json_dumps
 
 from . import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
+
+
+T = TypeVar("T")
 
 
 class BaseTab(ttk.Frame):
@@ -28,6 +31,7 @@ class BaseTab(ttk.Frame):
     ) -> None:
         super().__init__(master, style="DashboardBackground.TFrame")
         self.configs = configs
+        self._ui_config = configs.get("ui", {})
         self.paths = paths
         self.logger = utils.build_logger(self.__class__.__name__)
 
@@ -51,6 +55,18 @@ class BaseTab(ttk.Frame):
         """Update the configuration state for *section* with *updates*."""
 
         self.configs.setdefault(section, {}).update(updates)
+
+    def ui_setting(self, *keys: str, default: T) -> T:
+        """Retrieve a nested UI configuration value with a fallback."""
+
+        data: Any = self._ui_config
+        for key in keys:
+            if not isinstance(data, dict):
+                return default
+            data = data.get(key)
+            if data is None:
+                return default
+        return cast(T, data)
 
 
 class DashboardTab(BaseTab):
@@ -277,9 +293,10 @@ class LoginTab(BaseTab):
             style="Neutral.TButton",
             command=self._verify_env,
         ).pack(side=tk.LEFT)
-        self.status = ttk.Label(
-            actions, text="Awaiting verification", style="StatusInfo.TLabel"
+        login_idle = self.ui_setting(
+            "status", "login", "idle", default="Awaiting verification"
         )
+        self.status = ttk.Label(actions, text=login_idle, style="StatusInfo.TLabel")
         self.status.pack(side=tk.LEFT, padx=12)
 
     def _env_value(self, key: str) -> str:
@@ -292,10 +309,13 @@ class LoginTab(BaseTab):
                 handle.write(f"{key}={var.get()}\n")
         messagebox.showinfo("Settings", f"Saved credentials to {env_path}")
         self.update_section("login", {"saved": True, "verified": False})
-        self.status.config(
-            text="Saved. Run verification to confirm access.",
-            foreground=DARK_PALETTE["warning"],
+        saved_msg = self.ui_setting(
+            "status",
+            "login",
+            "saved",
+            default="Saved. Run verification to confirm access.",
         )
+        self.status.config(text=saved_msg, foreground=DARK_PALETTE["warning"])
 
     def _verify_env(self) -> None:
         missing = [key for key, var in self.vars.items() if not var.get().strip()]
@@ -308,10 +328,13 @@ class LoginTab(BaseTab):
             messagebox.showwarning("Verification", f"Provide values for: {details}")
             return
         self.update_section("login", {"saved": True, "verified": True})
-        self.status.config(
-            text="All keys present. Proceed to Research ▶",
-            foreground=DARK_PALETTE["success"],
+        verified_msg = self.ui_setting(
+            "status",
+            "login",
+            "verified",
+            default="All keys present. Proceed to Research ▶",
         )
+        self.status.config(text=verified_msg, foreground=DARK_PALETTE["success"])
         messagebox.showinfo(
             "Verification",
             "Environment entries look complete. Continue to the next tab.",
@@ -346,9 +369,12 @@ class ResearchTab(BaseTab):
             style="Surface.TLabel",
         ).grid(row=0, column=0, columnspan=4, sticky=tk.W, pady=(0, 8))
 
-        self.symbol_var = tk.StringVar(value="ES=F")
-        self.timeframe_var = tk.StringVar(value="5m")
-        self.bars_var = tk.IntVar(value=240)
+        shell_symbol = self.ui_setting("shell", "symbol", default="ES=F")
+        shell_interval = self.ui_setting("shell", "interval", default="5m")
+        shell_bars = int(self.ui_setting("shell", "research_bars", default=240))
+        self.symbol_var = tk.StringVar(value=shell_symbol)
+        self.timeframe_var = tk.StringVar(value=shell_interval)
+        self.bars_var = tk.IntVar(value=shell_bars)
 
         ttk.Label(controls, text="Symbol", style="Surface.TLabel").grid(
             row=1, column=0, sticky=tk.W, padx=(0, 6)
@@ -473,9 +499,12 @@ class TrainTab(BaseTab):
             style="Surface.TLabel",
         ).grid(row=0, column=0, columnspan=4, sticky=tk.W)
 
-        self.model_type = tk.StringVar(value="logistic")
-        self.calibrate_var = tk.BooleanVar(value=True)
-        self.lookback_var = tk.IntVar(value=480)
+        default_model = self.ui_setting("shell", "model", default="logistic")
+        default_calibrate = bool(self.ui_setting("shell", "calibrate", default=True))
+        default_lookback = int(self.ui_setting("shell", "lookback_bars", default=480))
+        self.model_type = tk.StringVar(value=default_model)
+        self.calibrate_var = tk.BooleanVar(value=default_calibrate)
+        self.lookback_var = tk.IntVar(value=default_lookback)
 
         ttk.Label(config, text="Model", style="Surface.TLabel").grid(
             row=1, column=0, sticky=tk.W, pady=(8, 0)
@@ -525,8 +554,11 @@ class TrainTab(BaseTab):
         self.output = tk.Text(self, height=12)
         self.style_text_widget(self.output)
         self.output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(6, 4))
+        training_idle = self.ui_setting(
+            "status", "training", "idle", default="Awaiting training run"
+        )
         self.status = ttk.Label(
-            self, text="Awaiting training run", anchor=tk.W, style="StatusInfo.TLabel"
+            self, text=training_idle, anchor=tk.W, style="StatusInfo.TLabel"
         )
         self.status.pack(fill=tk.X, padx=12, pady=(0, 12))
 
@@ -670,8 +702,14 @@ class TrainTab(BaseTab):
         self.output.insert(tk.END, json_dumps(payload))
         self.update_section("training", payload)
         if not calibration_failed:
+            success_msg = self.ui_setting(
+                "status",
+                "training",
+                "success",
+                default="Model artefact refreshed. Continue to Backtest ▶",
+            )
             self.status.config(
-                text="Model artefact refreshed. Continue to Backtest ▶",
+                text=success_msg,
                 foreground=DARK_PALETTE["accent_alt"],
             )
 
@@ -704,8 +742,10 @@ class BacktestTab(BaseTab):
             style="Surface.TLabel",
         ).grid(row=0, column=0, columnspan=4, sticky=tk.W)
 
-        self.sample_var = tk.IntVar(value=720)
-        self.strategy_var = tk.StringVar(value="momentum")
+        default_sample = int(self.ui_setting("shell", "simulation_bars", default=720))
+        default_strategy = self.ui_setting("shell", "playbook", default="momentum")
+        self.sample_var = tk.IntVar(value=default_sample)
+        self.strategy_var = tk.StringVar(value=default_strategy)
 
         ttk.Label(controls, text="Sample bars", style="Surface.TLabel").grid(
             row=1, column=0, sticky=tk.W, pady=(8, 0)
@@ -742,8 +782,11 @@ class BacktestTab(BaseTab):
         self.output = tk.Text(self, height=14)
         self.style_text_widget(self.output)
         self.output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(6, 4))
+        backtest_idle = self.ui_setting(
+            "status", "backtest", "idle", default="No simulations yet"
+        )
         self.status = ttk.Label(
-            self, text="No simulations yet", anchor=tk.W, style="StatusInfo.TLabel"
+            self, text=backtest_idle, anchor=tk.W, style="StatusInfo.TLabel"
         )
         self.status.pack(fill=tk.X, padx=12, pady=(0, 12))
 
@@ -771,10 +814,13 @@ class BacktestTab(BaseTab):
         }
         self.output.delete("1.0", tk.END)
         self.output.insert(tk.END, json_dumps(payload))
-        self.status.config(
-            text="Sim complete. If expectancy holds, draft a manual trade plan ▶",
-            foreground=DARK_PALETTE["accent_alt"],
+        success_msg = self.ui_setting(
+            "status",
+            "backtest",
+            "success",
+            default="Sim complete. If expectancy holds, draft a manual trade plan ▶",
         )
+        self.status.config(text=success_msg, foreground=DARK_PALETTE["accent_alt"])
         self.update_section("backtest", payload)
 
 
@@ -787,7 +833,10 @@ class TradeTab(BaseTab):
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
     ) -> None:
-        self.guard_status = tk.StringVar(value="Topstep Guard: pending review")
+        guard_pending = self.ui_setting(
+            "status", "guard", "pending", default="Topstep Guard: pending review"
+        )
+        self.guard_status = tk.StringVar(value=guard_pending)
         self.guard_label: ttk.Label | None = None
         super().__init__(master, configs, paths)
         self._build()
@@ -824,10 +873,15 @@ class TradeTab(BaseTab):
         self.output = tk.Text(self, height=12)
         self.style_text_widget(self.output)
         self.output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(6, 12))
+        guard_intro = self.ui_setting(
+            "status",
+            "guard",
+            "intro",
+            default="Manual execution only. Awaiting guard refresh...",
+        )
         self.output.insert(
             tk.END,
-            "Manual execution only. Awaiting guard refresh...\n"
-            "Use insights from earlier tabs to justify every trade — and always log rationale.",
+            f"{guard_intro}\nUse insights from earlier tabs to justify every trade — and always log rationale.",
         )
 
     def _show_risk(self) -> None:
@@ -882,7 +936,13 @@ class TradeTab(BaseTab):
         if guard == "OK":
             messagebox.showinfo("Topstep Guard", guard_message)
         else:
-            warning_message = f"{guard_message}\n\nDEFENSIVE_MODE active. Stand down and review your journal before trading."
+            warning_suffix = self.ui_setting(
+                "status",
+                "guard",
+                "defensive_warning",
+                default="DEFENSIVE_MODE active. Stand down and review your journal before trading.",
+            )
+            warning_message = f"{guard_message}\n\n{warning_suffix}"
             messagebox.showwarning("Topstep Guard", warning_message)
 
 

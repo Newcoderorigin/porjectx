@@ -38,3 +38,32 @@ The final `pip check` call should report "No broken requirements found",
 confirming that the pinned dependency set resolves without conflicts. Users on
 Python 3.12 should downgrade to Python 3.10/3.11 or wait for a dependency
 refresh that supports NumPy ≥1.28 and SciPy ≥1.12 before proceeding.
+
+## UI configuration surface
+
+The manual trading shell and Tkinter dashboard now read defaults from
+`configs/ui.yml`. The file ships with sensible demo values so the GUI renders
+without external data sources:
+
+- `appearance` &mdash; theme token (currently `dark`) and accent family used by the
+  style registry.
+- `shell` &mdash; defaults for the research symbol/timeframe, training lookback,
+  calibration flag, simulated backtest window, and preferred playbook.
+- `chart` &mdash; LiveChart refresh cadence (`fps`), point budget, and price
+  precision used by upcoming streaming widgets.
+- `status` &mdash; copy for the status banners shown in the Login, Train, Backtest,
+  and Guard tabs so product teams can retune messaging without touching code.
+
+Operators can override the YAML at runtime either with environment variables or
+CLI flags:
+
+- Environment variables follow the `TOPTEK_UI_*` convention, e.g.
+  `TOPTEK_UI_SYMBOL`, `TOPTEK_UI_INTERVAL`, `TOPTEK_UI_LOOKBACK_BARS`,
+  `TOPTEK_UI_CALIBRATE`, `TOPTEK_UI_FPS`, and `TOPTEK_UI_THEME`.
+- CLI switches (`--symbol`, `--timeframe`, `--lookback`, `--model`, `--fps`)
+  apply the same overrides for one-off runs and are reflected back into the GUI
+  when it launches.
+
+These controls keep the default Topstep demo intact while making it easy to
+point the toolkit at alternative markets or stress-test higher frequency charts
+without editing source files.

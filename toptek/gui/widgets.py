@@ -417,6 +417,7 @@ class TradeTab(BaseTab):
 
     def __init__(self, master: ttk.Notebook, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) -> None:
         self.guard_status = tk.StringVar(value="Topstep Guard: pending review")
+        self.guard_label: ttk.Label | None = None
         super().__init__(master, configs, paths)
         self._build()
 
@@ -433,7 +434,8 @@ class TradeTab(BaseTab):
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        ttk.Label(intro, textvariable=self.guard_status, foreground="#1d4ed8").pack(anchor=tk.W, pady=(8, 0))
+        self.guard_label = ttk.Label(intro, textvariable=self.guard_status, foreground="#1d4ed8")
+        self.guard_label.pack(anchor=tk.W, pady=(8, 0))
 
         ttk.Button(self, text="Refresh Topstep guard", command=self._show_risk).pack(pady=(6, 0))
         self.output = tk.Text(self, height=12)
@@ -456,6 +458,9 @@ class TradeTab(BaseTab):
         sample_size = risk.position_size(50000, profile, atr=3.5, tick_value=12.5, risk_per_trade=0.01)
         guard = "OK" if sample_size > 0 else "DEFENSIVE_MODE"
         self.guard_status.set(f"Topstep Guard: {guard}")
+        if self.guard_label is not None:
+            colour = "#15803d" if guard == "OK" else "#b91c1c"
+            self.guard_label.configure(foreground=colour)
         payload = {
             "profile": profile.__dict__,
             "suggested_contracts": sample_size,
@@ -464,6 +469,7 @@ class TradeTab(BaseTab):
                 "losses": profile.cooldown_losses,
                 "minutes": profile.cooldown_minutes,
             },
+            "topstep_guard": guard,
             "next_steps": "If guard shows DEFENSIVE_MODE, stand down and review journal before trading.",
         }
         self.output.delete("1.0", tk.END)

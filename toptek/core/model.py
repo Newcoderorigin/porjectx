@@ -184,12 +184,21 @@ def calibrate_classifier(
     X_cal = np.asarray(X_cal, dtype=float)
     y_cal = np.asarray(y_cal).ravel()
 
+    if not np.isfinite(y_cal).all():
+        raise ValueError("Calibration labels contain NaN or inf values; clean the labels before calibrating")
+
     if feature_mask is not None:
         indices = np.asarray(feature_mask, dtype=int)
-        if indices.size:
-            max_index = int(indices.max())
-        else:
-            max_index = -1
+        if indices.ndim != 1:
+            raise ValueError("Feature mask must be a 1-D sequence of column indices")
+        if indices.size == 0:
+            raise ValueError("Feature mask is empty; cannot realign calibration features")
+        if (indices < 0).any():
+            raise ValueError("Feature mask cannot include negative column indices")
+        if not np.all(np.diff(indices) >= 0):
+            raise ValueError("Feature mask must be sorted in ascending order")
+
+        max_index = int(indices.max())
         if original_feature_count is None or original_feature_count == X_cal.shape[1]:
             if max_index >= X_cal.shape[1]:
                 raise ValueError(
@@ -197,10 +206,10 @@ def calibrate_classifier(
                 )
             X_cal = X_cal[:, indices]
         elif X_cal.shape[1] == indices.size:
-            # Calibration payload already trimmed; ensure column order matches mask order.
-            order = np.argsort(np.argsort(indices))
-            if not np.array_equal(order, np.arange(indices.size)):
-                X_cal = X_cal[:, order]
+            # Calibration payload already trimmed to the retained columns. We assume the
+            # supplied feature order already matches the mask order since we no longer
+            # have the dropped columns to cross-check against.
+            pass
         else:
             raise ValueError(
                 "Calibration payload has unexpected dimensionality relative to the training mask"

@@ -833,12 +833,12 @@ class TradeTab(BaseTab):
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
     ) -> None:
+        super().__init__(master, configs, paths)
         guard_pending = self.ui_setting(
             "status", "guard", "pending", default="Topstep Guard: pending review"
         )
-        self.guard_status = tk.StringVar(value=guard_pending)
+        self.guard_status = tk.StringVar(master=self, value=guard_pending)
         self.guard_label: ttk.Label | None = None
-        super().__init__(master, configs, paths)
         self._build()
 
     def _build(self) -> None:

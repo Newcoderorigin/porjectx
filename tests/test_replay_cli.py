@@ -53,9 +53,8 @@ class DummySimulator:
         self._listeners.append(listener)
 
     def start(self) -> None:
-        self._running = True
-
         def _worker() -> None:
+            self._running = True
             for bar in self._bars:
                 time.sleep(0.01)
                 for listener in list(self._listeners):
@@ -91,6 +90,7 @@ def dummy_replay(monkeypatch) -> DummySimulator:
 
 
 def test_main_replays_and_prints_bars(dummy_replay: DummySimulator, capsys) -> None:
+    assert dummy_replay.running is False
     exit_code = sim.main(["dummy-path.csv"])
 
     dummy_replay.stop()

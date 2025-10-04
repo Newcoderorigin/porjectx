@@ -15,6 +15,8 @@ from typing import Iterable, List, Tuple
 
 import pytest
 
+_SKIP_TRACE_COVERAGE = bool(os.environ.get("TOPTEK_SKIP_TRACE_COVERAGE"))
+
 _TARGET_MODULES = (
     "toptek.core.data",
     "toptek.loops.learn",
@@ -136,6 +138,8 @@ def _coverage_for_module(
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session: pytest.Session) -> None:
+    if _SKIP_TRACE_COVERAGE:
+        return
     tracer = trace.Trace(
         count=True, trace=False, ignoremods=("pytest", "_pytest", "pluggy")
     )
@@ -149,6 +153,8 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    if _SKIP_TRACE_COVERAGE:
+        return
     config = session.config
     tracer: trace.Trace | None = getattr(config, "_toptek_tracer", None)
     if tracer is None:
@@ -181,6 +187,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 def pytest_terminal_summary(
     terminalreporter, exitstatus: int, config: pytest.Config
 ) -> None:
+    if _SKIP_TRACE_COVERAGE:
+        return
     summary: Iterable[Tuple[str, float, int, int]] = getattr(
         config, "_toptek_coverage_summary", []
     )

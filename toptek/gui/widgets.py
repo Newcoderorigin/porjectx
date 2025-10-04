@@ -366,8 +366,7 @@ class TradeTab(BaseTab):
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        self.guard_label = ttk.Label(intro, textvariable=self.guard_status, foreground="#1d4ed8")
-        self.guard_label.pack(anchor=tk.W, pady=(8, 0))
+        ttk.Label(intro, textvariable=self.guard_status, foreground="#1d4ed8").pack(anchor=tk.W, pady=(8, 0))
 
         ttk.Button(self, text="Refresh Topstep guard", command=self._show_risk).pack(pady=(6, 0))
         self.output = tk.Text(self, height=12)
@@ -412,10 +411,8 @@ class TradeTab(BaseTab):
         )
 
         if guard == "OK":
-            self.guard_label.configure(foreground="#166534")
             messagebox.showinfo("Topstep Guard", guard_message)
         else:
-            self.guard_label.configure(foreground="#b91c1c")
             warning_message = (
                 f"{guard_message}\n\nDEFENSIVE_MODE active. Stand down and review your journal before trading."
             )

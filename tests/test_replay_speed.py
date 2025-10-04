@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import pandas as pd
 import pytest
 
-from toptek.replay import ReplayBar, ReplaySimulator
+pd = pytest.importorskip("pandas")
+if (
+    getattr(pd.DataFrame, "__module__", "builtins") == "builtins"
+):  # pragma: no cover - env specific
+    pytest.skip(
+        "pandas DataFrame unavailable in test environment", allow_module_level=True
+    )
+
+from toptek.replay import ReplayBar, ReplaySimulator  # noqa: E402
 
 
 class VirtualClock:

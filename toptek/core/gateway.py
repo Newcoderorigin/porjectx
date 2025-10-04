@@ -43,7 +43,9 @@ class ProjectXGateway:
     """HTTP client for ProjectX Gateway endpoints."""
 
     def __init__(self, base_url: str, username: str, api_key: str) -> None:
-        self._config = GatewayConfig(base_url=base_url.rstrip("/"), username=username, api_key=api_key)
+        self._config = GatewayConfig(
+            base_url=base_url.rstrip("/"), username=username, api_key=api_key
+        )
         self._client = httpx.Client(base_url=self._config.base_url, timeout=20.0)
         self._token: Optional[str] = None
 
@@ -76,7 +78,10 @@ class ProjectXGateway:
     def _headers(self) -> Dict[str, str]:
         if not self._token:
             raise AuthenticationError("ProjectX gateway requires login before use")
-        return {"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"}
+        return {
+            "Authorization": f"Bearer {self._token}",
+            "Content-Type": "application/json",
+        }
 
     def _request(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Send a POST request with automatic token validation."""

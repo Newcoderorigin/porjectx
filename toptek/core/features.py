@@ -7,8 +7,20 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
-from ta.momentum import RSIIndicator, ROCIndicator, StochasticOscillator, WilliamsRIndicator
-from ta.trend import ADXIndicator, CCIIndicator, EMAIndicator, MACD, PSARIndicator, SMAIndicator
+from ta.momentum import (
+    RSIIndicator,
+    ROCIndicator,
+    StochasticOscillator,
+    WilliamsRIndicator,
+)
+from ta.trend import (
+    ADXIndicator,
+    CCIIndicator,
+    EMAIndicator,
+    MACD,
+    PSARIndicator,
+    SMAIndicator,
+)
 from ta.volatility import AverageTrueRange, BollingerBands, DonchianChannel
 from ta.volume import EaseOfMovementIndicator, MFIIndicator, OnBalanceVolumeIndicator
 
@@ -52,9 +64,13 @@ def compute_features(data: pd.DataFrame) -> Dict[str, np.ndarray]:
     features["rsi_14"] = RSIIndicator(close, window=14).rsi().to_numpy()
     features["roc_10"] = ROCIndicator(close, window=10).roc().to_numpy()
     features["roc_20"] = ROCIndicator(close, window=20).roc().to_numpy()
-    features["willr_14"] = WilliamsRIndicator(high, low, close, lbp=14).williams_r().to_numpy()
+    features["willr_14"] = (
+        WilliamsRIndicator(high, low, close, lbp=14).williams_r().to_numpy()
+    )
     features["stoch_k"] = StochasticOscillator(high, low, close).stoch().to_numpy()
-    features["stoch_d"] = StochasticOscillator(high, low, close).stoch_signal().to_numpy()
+    features["stoch_d"] = (
+        StochasticOscillator(high, low, close).stoch_signal().to_numpy()
+    )
 
     atr = AverageTrueRange(high, low, close, window=14)
     features["atr_14"] = atr.average_true_range().to_numpy()
@@ -75,9 +91,19 @@ def compute_features(data: pd.DataFrame) -> Dict[str, np.ndarray]:
     features["di_plus"] = adx.adx_pos().to_numpy()
     features["di_minus"] = adx.adx_neg().to_numpy()
 
-    features["obv"] = OnBalanceVolumeIndicator(close, volume.fillna(0)).on_balance_volume().to_numpy()
-    features["mfi_14"] = MFIIndicator(high, low, close, volume.fillna(0), window=14).money_flow_index().to_numpy()
-    features["eom_14"] = EaseOfMovementIndicator(high, low, volume.fillna(1), window=14).ease_of_movement().to_numpy()
+    features["obv"] = (
+        OnBalanceVolumeIndicator(close, volume.fillna(0)).on_balance_volume().to_numpy()
+    )
+    features["mfi_14"] = (
+        MFIIndicator(high, low, close, volume.fillna(0), window=14)
+        .money_flow_index()
+        .to_numpy()
+    )
+    features["eom_14"] = (
+        EaseOfMovementIndicator(high, low, volume.fillna(1), window=14)
+        .ease_of_movement()
+        .to_numpy()
+    )
 
     features["cci_20"] = CCIIndicator(high, low, close, window=20).cci().to_numpy()
     # Normalise PSAR inputs to avoid pandas treating integer keys as labels.
@@ -93,11 +119,15 @@ def compute_features(data: pd.DataFrame) -> Dict[str, np.ndarray]:
     features["return_5"] = pd.Series(log_returns).rolling(window=5).sum().to_numpy()
     features["return_20"] = pd.Series(log_returns).rolling(window=20).sum().to_numpy()
 
-    features["volatility_close"] = pd.Series(log_returns).rolling(window=20).std().to_numpy()
+    features["volatility_close"] = (
+        pd.Series(log_returns).rolling(window=20).std().to_numpy()
+    )
     high_low = np.log(high / low)
     features["volatility_parkinson"] = high_low.rolling(window=20).std().to_numpy()
 
-    features["volume_zscore"] = (volume - volume.rolling(20).mean()) / volume.rolling(20).std()
+    features["volume_zscore"] = (volume - volume.rolling(20).mean()) / volume.rolling(
+        20
+    ).std()
     features["volume_zscore"] = features["volume_zscore"].to_numpy()
 
     return features

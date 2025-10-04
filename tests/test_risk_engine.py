@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 pytest.importorskip("yaml")
+pytest.importorskip("numpy")
 
 from toptek.risk import RiskEngine
 

@@ -33,7 +33,14 @@ def can_trade(current_time: datetime, risk_profile: RiskProfile) -> bool:
     return True
 
 
-def position_size(account_balance: float, risk_profile: RiskProfile, atr: float, tick_value: float, *, risk_per_trade: float = 0.01) -> int:
+def position_size(
+    account_balance: float,
+    risk_profile: RiskProfile,
+    atr: float,
+    tick_value: float,
+    *,
+    risk_per_trade: float = 0.01,
+) -> int:
     """Return an integer contract size respecting risk limits."""
 
     dollar_risk = account_balance * risk_per_trade

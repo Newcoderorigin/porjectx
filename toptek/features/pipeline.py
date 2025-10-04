@@ -29,7 +29,9 @@ def _hash_dataframe(df: pd.DataFrame) -> str:
     return digest
 
 
-def _load_cache(cache_path: Path) -> Tuple[np.ndarray, np.ndarray, Dict[str, Any]] | None:
+def _load_cache(
+    cache_path: Path,
+) -> Tuple[np.ndarray, np.ndarray, Dict[str, Any]] | None:
     if not cache_path.exists():
         return None
     arrays = np.load(cache_path, allow_pickle=False)
@@ -41,9 +43,13 @@ def _load_cache(cache_path: Path) -> Tuple[np.ndarray, np.ndarray, Dict[str, Any
     return arrays["X"], arrays["y"], meta
 
 
-def _store_cache(cache_path: Path, X: np.ndarray, y: np.ndarray, meta: Dict[str, Any]) -> None:
+def _store_cache(
+    cache_path: Path, X: np.ndarray, y: np.ndarray, meta: Dict[str, Any]
+) -> None:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(cache_path, X=X, y=y, mask=np.asarray(meta.get("mask", []), dtype=np.int8))
+    np.savez_compressed(
+        cache_path, X=X, y=y, mask=np.asarray(meta.get("mask", []), dtype=np.int8)
+    )
     with cache_path.with_suffix(".json").open("w", encoding="utf-8") as handle:
         json.dump(meta, handle, indent=2)
 

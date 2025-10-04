@@ -47,7 +47,9 @@ def _performance_metrics(returns: np.ndarray) -> Dict[str, float]:
     }
 
 
-def _apply_policy(probs: np.ndarray, returns: np.ndarray, tau: float) -> Dict[str, float]:
+def _apply_policy(
+    probs: np.ndarray, returns: np.ndarray, tau: float
+) -> Dict[str, float]:
     mask = probs >= tau
     selected_returns = returns[mask]
     coverage = float(mask.mean())
@@ -60,12 +62,18 @@ def _apply_policy(probs: np.ndarray, returns: np.ndarray, tau: float) -> Dict[st
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run calibrated backtests")
     parser.add_argument("--config", required=True, help="Path to YAML config")
-    parser.add_argument("--use-calibrated", action="store_true", help="Use calibrated probabilities")
-    parser.add_argument("--optimize-threshold", action="store_true", help="Optimise tau for hit-rate")
+    parser.add_argument(
+        "--use-calibrated", action="store_true", help="Use calibrated probabilities"
+    )
+    parser.add_argument(
+        "--optimize-threshold", action="store_true", help="Optimise tau for hit-rate"
+    )
     return parser.parse_args()
 
 
-def run(config_path: Path, *, use_calibrated: bool, optimize_threshold: bool) -> Dict[str, float]:
+def run(
+    config_path: Path, *, use_calibrated: bool, optimize_threshold: bool
+) -> Dict[str, float]:
     config_path = config_path.resolve()
     config = _load_config(config_path)
     project_root = config_path.parent.parent
@@ -73,7 +81,9 @@ def run(config_path: Path, *, use_calibrated: bool, optimize_threshold: bool) ->
     models_dir = project_root / config["output"]["models_dir"]
 
     bars = pd.read_parquet(bars_path)
-    bundle = build_features(bars, cache_dir=project_root / config["output"].get("cache_dir", ".cache"))
+    bundle = build_features(
+        bars, cache_dir=project_root / config["output"].get("cache_dir", ".cache")
+    )
 
     calibrator = _load_model(models_dir)
     raw_probs = calibrator.base_estimator.predict_proba(bundle.X)[:, 1]
@@ -81,7 +91,9 @@ def run(config_path: Path, *, use_calibrated: bool, optimize_threshold: bool) ->
     probs = calibrated_probs if use_calibrated else raw_probs
 
     forward_returns = bars["close"].pct_change().shift(-1)
-    forward_returns = forward_returns.loc[bundle.meta["valid_index"]].to_numpy(dtype=float)
+    forward_returns = forward_returns.loc[bundle.meta["valid_index"]].to_numpy(
+        dtype=float
+    )
     labels = (forward_returns > 0).astype(int)
 
     baseline = _apply_policy(probs, forward_returns, tau=0.5)
@@ -121,7 +133,11 @@ def run(config_path: Path, *, use_calibrated: bool, optimize_threshold: bool) ->
 
 def main() -> None:
     args = _parse_args()
-    report = run(Path(args.config), use_calibrated=args.use_calibrated, optimize_threshold=args.optimize_threshold)
+    report = run(
+        Path(args.config),
+        use_calibrated=args.use_calibrated,
+        optimize_threshold=args.optimize_threshold,
+    )
     print(json.dumps(report, indent=2))
 
 

@@ -82,7 +82,9 @@ def opt_threshold(
                 "threshold": 0.5,
                 "hit_rate": float(selected.mean()) if selected.size else 0.0,
                 "coverage": coverage,
-                "ev": float(_compute_expected_value(selected)) if selected.size else 0.0,
+                "ev": (
+                    float(_compute_expected_value(selected)) if selected.size else 0.0
+                ),
             }
         )
         return 0.5, curve

@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
+import pytest
 
-from toptek.data import io
+pd = pytest.importorskip("pandas")
+io = pytest.importorskip("toptek.data.io")
 
 
 def test_init_and_demo(tmp_path: Path, monkeypatch) -> None:

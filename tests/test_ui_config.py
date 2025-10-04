@@ -1,9 +1,13 @@
 from __future__ import annotations
+import sys
 from pathlib import Path
 
 import pytest
 
-from core import ui_config
+core_package = pytest.importorskip("toptek.core")
+sys.modules.setdefault("core", core_package)
+
+from toptek.core import ui_config  # noqa: E402
 
 
 def test_load_ui_config_defaults(tmp_path: Path) -> None:

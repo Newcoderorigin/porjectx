@@ -22,7 +22,9 @@ def _cache_file(cache_dir: Path, symbol: str, timeframe: str) -> Path:
     return cache_dir / f"{safe_symbol}_{timeframe}.json"
 
 
-def load_cached_bars(cache_dir: Path, symbol: str, timeframe: str) -> List[Dict[str, Any]]:
+def load_cached_bars(
+    cache_dir: Path, symbol: str, timeframe: str
+) -> List[Dict[str, Any]]:
     """Load cached bar data if available."""
 
     path = _cache_file(cache_dir, symbol, timeframe)
@@ -32,7 +34,9 @@ def load_cached_bars(cache_dir: Path, symbol: str, timeframe: str) -> List[Dict[
         return json.load(handle)
 
 
-def save_cached_bars(cache_dir: Path, symbol: str, timeframe: str, bars: Iterable[Dict[str, Any]]) -> None:
+def save_cached_bars(
+    cache_dir: Path, symbol: str, timeframe: str, bars: Iterable[Dict[str, Any]]
+) -> None:
     """Persist bar data to disk for reuse."""
 
     path = _cache_file(cache_dir, symbol, timeframe)
@@ -73,8 +77,13 @@ def resample_ohlc(bars: List[Dict[str, Any]], *, field: str = "close") -> np.nda
     return np.array([float(bar.get(field, 0.0)) for bar in bars], dtype=float)
 
 
-__all__ = ["fetch_bars", "resample_ohlc", "load_cached_bars", "save_cached_bars", "sample_dataframe"]
-
+__all__ = [
+    "fetch_bars",
+    "resample_ohlc",
+    "load_cached_bars",
+    "save_cached_bars",
+    "sample_dataframe",
+]
 
 
 def sample_dataframe(rows: int = 500) -> pd.DataFrame:
@@ -87,5 +96,7 @@ def sample_dataframe(rows: int = 500) -> pd.DataFrame:
     close = base + np.random.randn(rows) * 0.5
     open_ = close + np.random.randn(rows) * 0.3
     volume = np.random.randint(100, 1000, size=rows)
-    return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": volume}, index=index)
-
+    return pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": volume},
+        index=index,
+    )

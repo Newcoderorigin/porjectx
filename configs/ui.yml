@@ -35,3 +35,19 @@ status:
     playing: "Streaming simulator feed."
     paused: "Replay paused."
     complete: "Reached end of recording."
+lmstudio:
+  enabled: true
+  base_url: "http://localhost:1234/v1"
+  api_key: "lm-studio"
+  model: "llama-3.1-8b-instruct"
+  system_prompt: "You are the Autostealth Evolution assistant. Follow V10 ZERO-CONS."
+  max_tokens: 512
+  temperature: 0.0
+  top_p: 1.0
+  timeout_s: 30
+futures_research:
+  enabled: true
+  default_symbol: "ES=F"
+  default_interval: "1d"
+  sources:
+    - "yahoo_futures"

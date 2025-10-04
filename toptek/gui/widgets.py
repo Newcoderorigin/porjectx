@@ -289,7 +289,7 @@ class TrainTab(BaseTab):
             cal_size = max(60, int(len(X) * 0.2))
             X_cal = X[-cal_size:]
             y_cal = y[-cal_size:]
-            calibrate_kwargs = {}
+            calibrate_kwargs: dict[str, object] = {}
             if result.retained_columns is not None:
                 calibrate_kwargs["feature_mask"] = result.retained_columns
             if result.original_feature_count is not None:

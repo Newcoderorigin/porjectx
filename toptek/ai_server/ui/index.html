@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Toptek Quant Co-Pilot</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-slate-950 text-slate-100 min-h-screen">
+    <div class="max-w-4xl mx-auto py-8 px-4 space-y-6">
+      <header>
+        <h1 class="text-3xl font-semibold">AI Server &amp; Quant Co-Pilot</h1>
+        <p class="text-sm text-slate-300">
+          Stream messages to a locally hosted LM Studio model and trigger quant tools
+          without leaving your browser.
+        </p>
+      </header>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-xl font-medium">Model Picker</h2>
+            <p class="text-xs text-slate-400">Auto policy chooses for you; override on demand.</p>
+          </div>
+          <button
+            id="refresh-models"
+            class="px-3 py-1 text-sm rounded bg-emerald-500 text-slate-900 hover:bg-emerald-400"
+          >Refresh</button>
+        </div>
+        <select
+          id="model-select"
+          class="w-full bg-slate-800 text-slate-100 rounded border border-slate-700 p-2"
+        ></select>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-medium">Live Chat</h2>
+          <div id="chat-status" class="text-xs text-slate-400">Idle</div>
+        </div>
+        <div
+          id="chat-log"
+          class="h-72 overflow-y-auto bg-slate-950 border border-slate-800 rounded p-3 space-y-3 text-sm"
+        ></div>
+        <form id="chat-form" class="space-y-3">
+          <textarea
+            id="chat-input"
+            class="w-full bg-slate-800 border border-slate-700 rounded p-2 focus:outline-none focus:ring"
+            rows="3"
+            placeholder="Ask the Quant Co-Pilot…"
+            required
+          ></textarea>
+          <div class="flex items-center space-x-3">
+            <label class="flex items-center space-x-2 text-xs text-slate-300">
+              <span>Max tokens</span>
+              <input
+                id="chat-max-tokens"
+                type="number"
+                min="32"
+                class="w-20 bg-slate-800 border border-slate-700 rounded p-1"
+                value="512"
+              />
+            </label>
+            <button
+              type="submit"
+              class="ml-auto px-4 py-2 rounded bg-emerald-500 text-slate-900 hover:bg-emerald-400"
+            >Send</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="bg-slate-900 border border-slate-800 rounded-lg p-4 space-y-3">
+        <h2 class="text-xl font-medium">Quant Tools</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <button id="run-backtest" class="border border-slate-700 rounded p-3 hover:bg-slate-800">
+            Run Backtest
+          </button>
+          <button id="run-walkforward" class="border border-slate-700 rounded p-3 hover:bg-slate-800">
+            Walk-Forward Report
+          </button>
+          <button id="run-metrics" class="border border-slate-700 rounded p-3 hover:bg-slate-800">
+            Metrics Snapshot
+          </button>
+        </div>
+        <pre id="tool-output" class="bg-slate-950 border border-slate-800 rounded p-3 text-xs overflow-x-auto"></pre>
+      </section>
+    </div>
+
+    <script>
+      async function fetchModels() {
+        const select = document.getElementById('model-select');
+        select.innerHTML = '';
+        try {
+          const response = await fetch('/models');
+          const payload = await response.json();
+          payload.models.forEach((model) => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = `${model.id} · ctx=${model.max_context ?? '∞'} · tools=${model.supports_tools}`;
+            if (payload.selected && payload.selected === model.id) {
+              option.selected = true;
+            }
+            select.appendChild(option);
+          });
+        } catch (error) {
+          console.error('Failed to load models', error);
+        }
+      }
+
+      async function selectModel(modelId) {
+        await fetch('/models/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model_id: modelId }),
+        });
+      }
+
+      async function streamChat(message, maxTokens) {
+        const chatLog = document.getElementById('chat-log');
+        const status = document.getElementById('chat-status');
+        status.textContent = 'Streaming…';
+        chatLog.insertAdjacentHTML('beforeend', `<div><strong>You:</strong> ${message}</div>`);
+
+        const payload = {
+          messages: [{ role: 'user', content: message }],
+          max_tokens: maxTokens ? Number(maxTokens) : undefined,
+        };
+
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let assistantBlock = document.createElement('div');
+        assistantBlock.innerHTML = '<strong>Co-Pilot:</strong> ';
+        chatLog.appendChild(assistantBlock);
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop();
+          parts.forEach((part) => {
+            if (!part.startsWith('data:')) return;
+            const payload = part.replace('data:', '').trim();
+            if (!payload || payload === '[DONE]') return;
+            try {
+              const data = JSON.parse(payload);
+              const token = data?.choices?.[0]?.delta?.content;
+              if (token) {
+                assistantBlock.innerHTML += token;
+                chatLog.scrollTop = chatLog.scrollHeight;
+              }
+            } catch (error) {
+              console.warn('Failed to parse chunk', error);
+            }
+          });
+        }
+        status.textContent = 'Idle';
+      }
+
+      async function runTool(endpoint, body) {
+        const output = document.getElementById('tool-output');
+        output.textContent = 'Running…';
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const json = await response.json();
+        output.textContent = JSON.stringify(json, null, 2);
+      }
+
+      document.getElementById('chat-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const message = document.getElementById('chat-input').value.trim();
+        if (!message) return;
+        const maxTokens = document.getElementById('chat-max-tokens').value;
+        await streamChat(message, maxTokens);
+        document.getElementById('chat-input').value = '';
+      });
+
+      document.getElementById('refresh-models').addEventListener('click', async () => {
+        await fetchModels();
+      });
+
+      document.getElementById('model-select').addEventListener('change', async (event) => {
+        await selectModel(event.target.value);
+      });
+
+      document.getElementById('run-backtest').addEventListener('click', async () => {
+        await runTool('/tools/backtest', {
+          symbol: 'ES',
+          start: '2020-01-01',
+          end: '2023-12-31',
+          costs: 0.25,
+          slippage: 0.10,
+          vol_target: 0.15,
+        });
+      });
+
+      document.getElementById('run-walkforward').addEventListener('click', async () => {
+        await runTool('/tools/walkforward', { config_path: 'configs/config.yml' });
+      });
+
+      document.getElementById('run-metrics').addEventListener('click', async () => {
+        await runTool('/tools/metrics', { pnl: [0.01, -0.02, 0.015, 0.007, 0.03] });
+      });
+
+      fetchModels();
+    </script>
+  </body>
+</html>

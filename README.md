@@ -97,3 +97,33 @@ data quality and feed health at a glance:
 
 Both utilities return frozen dataclasses to keep the API predictable for
 widgets, scripts, or automated monitors.
+
+## AI Server & Quant Co-Pilot
+
+The `toptek.ai_server` package launches a local FastAPI application that
+coordinates LM Studio, auto-selects the best local model, and exposes streaming
+chat and quant tooling endpoints:
+
+- `GET /healthz` &mdash; verifies LM Studio is reachable and that quant utilities
+  load successfully.
+- `GET /models` &mdash; lists discovered LM Studio models alongside throughput
+  telemetry (TTFT/tokens-per-second) gathered during use.
+- `POST /models/select` &mdash; overrides the auto-router and pins a default model
+  for subsequent chats.
+- `POST /chat` &mdash; streams an OpenAI-compatible conversation via the chosen
+  model while updating router telemetry.
+- `POST /tools/backtest`, `/tools/walkforward`, `/tools/metrics` &mdash; bridges to
+  local quant routines for deterministic analysis and risk controls.
+
+Launch the service with the helper script, optionally pointing at a custom
+configuration or overriding environment variables (see `configs/ai.yml` and
+`toptek/.env.example`):
+
+```bash
+scripts/start_ai_server.sh --port 8080
+```
+
+The server will attempt to auto-start LM Studio with `lms server start` if it is
+not already running on `LMSTUDIO_BASE_URL`. Set `LMSTUDIO_AUTO_START=false` to
+skip this behaviour. The bundled Tailwind/htmx UI is available at `/` and
+includes live chat, a model picker, and buttons that exercise the quant tools.

@@ -1,0 +1,21 @@
+# Default configuration for the local AI Server.
+#
+# The server coordinates with an LM Studio instance that exposes an
+# OpenAI-compatible API. These defaults keep everything on localhost but can be
+# overridden either via environment variables or by editing this file.
+#
+# Environment variables take precedence over these values:
+#   LMSTUDIO_BASE_URL - Overrides the OpenAI-compatible base URL (default http://localhost:1234/v1)
+#   LMSTUDIO_PORT     - Port used when auto-starting LM Studio via the `lms` CLI
+#   LMSTUDIO_MODEL    - Preferred default model id
+#   AI_DEFAULT_ROLE   - System role injected into chats when none is supplied
+#
+# The AI Server refuses to boot on unsupported interpreters (Python 3.12+) to
+# preserve compatibility with the quant stack pinned in requirements-lite.txt.
+base_url: "http://localhost:1234/v1"
+port: 1234
+auto_start: true
+poll_interval_seconds: 0.5
+poll_timeout_seconds: 10.0
+default_model: null
+default_role: "You are the Quant Co-Pilot. Provide actionable, risk-aware answers."

@@ -19,8 +19,12 @@ documented in `toptek/README.md`.
 
 ## Verifying the environment
 
-Create and activate a Python 3.10+ virtual environment, then install and check
-for compatibility issues:
+Use Python **3.10 or 3.11**—matching the guidance in `toptek/README.md`'s
+quickstart—to stay within the wheel support window for SciPy and
+scikit-learn 1.3.x. Python 3.12 is currently unsupported because prebuilt
+SciPy/scikit-learn wheels for that interpreter depend on NumPy ≥1.28 and
+SciPy ≥1.12, which exceed this project's pinned ranges. Create and activate a
+compatible virtual environment, then install and check for dependency issues:
 
 ```bash
 python -m venv .venv
@@ -31,4 +35,6 @@ pip check
 ```
 
 The final `pip check` call should report "No broken requirements found",
-confirming that the pinned dependency set resolves without conflicts.
+confirming that the pinned dependency set resolves without conflicts. Users on
+Python 3.12 should downgrade to Python 3.10/3.11 or wait for a dependency
+refresh that supports NumPy ≥1.28 and SciPy ≥1.12 before proceeding.

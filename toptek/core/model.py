@@ -32,7 +32,30 @@ def train_classifier(
     models_dir: Path,
     threshold: float = 0.65,
 ) -> TrainResult:
-    """Train a basic classifier and persist it to ``models_dir``."""
+    """Train a basic classifier and persist it to ``models_dir``.
+
+    Raises
+    ------
+    ValueError
+        If the feature matrix is not two-dimensional, contains no finite rows after
+        cleaning, or the target labels collapse into a single class.
+    """
+
+    if X.ndim != 2:
+        raise ValueError("Feature matrix must be 2-dimensional")
+    y = np.asarray(y).ravel()
+
+    if not np.isfinite(X).all() or not np.isfinite(y).all():
+        feature_mask = np.isfinite(X).all(axis=1)
+        label_mask = np.isfinite(y)
+        mask = feature_mask & label_mask
+        X = X[mask]
+        y = y[mask]
+        if X.size == 0:
+            raise ValueError("No valid rows remain after removing NaN/inf values")
+
+    if np.unique(y).size < 2:
+        raise ValueError("Training requires at least two target classes")
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True, random_state=42)
 

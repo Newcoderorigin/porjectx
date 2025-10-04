@@ -80,8 +80,13 @@ def compute_features(data: pd.DataFrame) -> Dict[str, np.ndarray]:
     features["eom_14"] = EaseOfMovementIndicator(high, low, volume.fillna(1), window=14).ease_of_movement().to_numpy()
 
     features["cci_20"] = CCIIndicator(high, low, close, window=20).cci().to_numpy()
-    psar = PSARIndicator(high, low, close)
-    features["psar"] = psar.psar().to_numpy()
+    # Normalise PSAR inputs to avoid pandas treating integer keys as labels.
+    original_index = high.index
+    high_psar = high.reset_index(drop=True)
+    low_psar = low.reset_index(drop=True)
+    close_psar = close.reset_index(drop=True)
+    psar = PSARIndicator(high_psar, low_psar, close_psar).psar()
+    features["psar"] = pd.Series(psar.to_numpy(), index=original_index).to_numpy()
 
     log_returns = np.log(close).diff().fillna(0).to_numpy()
     features["return_1"] = log_returns

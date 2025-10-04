@@ -274,6 +274,10 @@ class TrainTab(BaseTab):
             prep_notes.append(
                 f"removed {preprocessing['dropped_columns']} empty columns"
             )
+        if result.retained_columns is not None and result.original_feature_count is not None:
+            prep_notes.append(
+                f"retained {len(result.retained_columns)} of {result.original_feature_count} feature columns"
+            )
         if prep_notes:
             self.log_event(
                 "Preprocessing summary: " + ", ".join(prep_notes),
@@ -285,8 +289,17 @@ class TrainTab(BaseTab):
             cal_size = max(60, int(len(X) * 0.2))
             X_cal = X[-cal_size:]
             y_cal = y[-cal_size:]
+            calibrate_kwargs = {}
+            if result.retained_columns is not None:
+                calibrate_kwargs["feature_mask"] = result.retained_columns
+                if result.original_feature_count is not None:
+                    calibrate_kwargs["original_feature_count"] = result.original_feature_count
             try:
-                calibrated_path = model.calibrate_classifier(result.model_path, (X_cal, y_cal))
+                calibrated_path = model.calibrate_classifier(
+                    result.model_path,
+                    (X_cal, y_cal),
+                    **calibrate_kwargs,
+                )
             except (ValueError, RuntimeError) as exc:
                 calibrate_report = f"calibration failed: {exc}"
                 calibration_failed = True
@@ -318,6 +331,8 @@ class TrainTab(BaseTab):
             "metrics": result.metrics,
             "threshold": result.threshold,
             "preprocessing": preprocessing,
+            "retained_columns": list(result.retained_columns) if result.retained_columns is not None else None,
+            "original_feature_count": result.original_feature_count,
             "calibration": calibrate_report,
         }
         self.output.insert(tk.END, json_dumps(payload))

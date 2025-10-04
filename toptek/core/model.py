@@ -25,6 +25,8 @@ class TrainResult:
     metrics: Dict[str, float]
     threshold: float
     preprocessing: Dict[str, int] = field(default_factory=dict)
+    retained_columns: tuple[int, ...] | None = None
+    original_feature_count: int | None = None
 
 
 def train_classifier(
@@ -56,6 +58,8 @@ def train_classifier(
     X = np.asarray(X, dtype=float)
     y = np.asarray(y).ravel()
 
+    original_feature_count = X.shape[1]
+
     if not np.isfinite(y).all():
         raise ValueError("Target labels contain NaN or inf values; clean the labels before training")
 
@@ -76,10 +80,15 @@ def train_classifier(
 
     col_all_nan = np.isnan(X).all(axis=0)
     dropped_columns = int(col_all_nan.sum())
+    retained_columns: tuple[int, ...] | None = None
     if dropped_columns:
-        X = X[:, ~col_all_nan]
+        valid_column_mask = ~col_all_nan
+        X = X[:, valid_column_mask]
         if X.shape[1] == 0:
             raise ValueError("All feature columns were empty after cleaning; cannot train")
+        retained_columns = tuple(int(idx) for idx in np.flatnonzero(valid_column_mask))
+    else:
+        retained_columns = None
 
     if np.unique(y).size < 2:
         raise ValueError("Training requires at least two target classes")
@@ -122,6 +131,8 @@ def train_classifier(
             "dropped_rows": dropped_rows,
             "dropped_columns": dropped_columns,
         },
+        retained_columns=retained_columns,
+        original_feature_count=original_feature_count,
     )
 
 
@@ -138,6 +149,8 @@ def calibrate_classifier(
     *,
     method: str = "sigmoid",
     output_path: Path | None = None,
+    feature_mask: tuple[int, ...] | np.ndarray | None = None,
+    original_feature_count: int | None = None,
 ) -> Path:
     """Calibrate a pre-trained classifier using hold-out data.
 
@@ -152,6 +165,15 @@ def calibrate_classifier(
     output_path:
         Optional override for where the calibrated model should be persisted.
 
+    feature_mask:
+        Optional tuple of retained column indices from the original feature matrix.
+        When provided, the calibration features will be subset or reordered to
+        match the training-time dimensionality.
+    original_feature_count:
+        Number of columns in the original training feature matrix. Used to
+        determine whether the calibration payload still contains the untouched
+        feature space or has already been trimmed.
+
     Returns
     -------
     Path
@@ -159,6 +181,46 @@ def calibrate_classifier(
     """
 
     X_cal, y_cal = calibration_data
+    X_cal = np.asarray(X_cal, dtype=float)
+    y_cal = np.asarray(y_cal).ravel()
+
+    if feature_mask is not None:
+        indices = np.asarray(feature_mask, dtype=int)
+        if indices.size:
+            max_index = int(indices.max())
+        else:
+            max_index = -1
+        if original_feature_count is None or original_feature_count == X_cal.shape[1]:
+            if max_index >= X_cal.shape[1]:
+                raise ValueError(
+                    "Feature mask references columns beyond the calibration matrix bounds"
+                )
+            X_cal = X_cal[:, indices]
+        elif X_cal.shape[1] == indices.size:
+            # Calibration payload already trimmed; ensure column order matches mask order.
+            order = np.argsort(np.argsort(indices))
+            if not np.array_equal(order, np.arange(indices.size)):
+                X_cal = X_cal[:, order]
+        else:
+            raise ValueError(
+                "Calibration payload has unexpected dimensionality relative to the training mask"
+            )
+
+    non_finite = ~np.isfinite(X_cal)
+    if non_finite.any():
+        X_cal = X_cal.copy()
+        X_cal[non_finite] = np.nan
+
+    row_all_nan = np.isnan(X_cal).all(axis=1)
+    if row_all_nan.any():
+        X_cal = X_cal[~row_all_nan]
+        y_cal = y_cal[~row_all_nan]
+    if X_cal.size == 0:
+        raise ValueError("No valid calibration rows remain after cleaning")
+
+    if np.unique(y_cal).size < 2:
+        raise ValueError("Calibration requires at least two target classes")
+
     pipeline = load_model(model_path)
     calibrator = CalibratedClassifierCV(estimator=pipeline, method=method, cv="prefit")
     calibrator.fit(X_cal, y_cal)

@@ -56,6 +56,12 @@ def run_cli(args: argparse.Namespace, configs: Dict[str, Dict[str, object]], pat
                 preprocess.get("dropped_rows", 0),
                 preprocess.get("dropped_columns", 0),
             )
+        if result.retained_columns is not None and result.original_feature_count is not None:
+            logger.info(
+                "Retained %s of %s feature columns after cleaning",
+                len(result.retained_columns),
+                result.original_feature_count,
+            )
         logger.info("Training complete: metrics=%s threshold=%.2f", result.metrics, result.threshold)
     elif args.cli == "backtest":
         returns = np.log(df["close"]).diff().fillna(0).to_numpy()

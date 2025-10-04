@@ -374,10 +374,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
             print(f"Seek ignored: {exc}")
     simulator.start()
     try:
-        while simulator.running or not queue.empty():
+        while True:
+            if not simulator.running and queue.empty():
+                break
             try:
                 bar = queue.get(timeout=0.25)
             except Empty:
+                if not simulator.running and queue.empty():
+                    break
                 continue
             print(json.dumps(bar.to_dict(), default=str))
     except KeyboardInterrupt:  # pragma: no cover - interactive guard

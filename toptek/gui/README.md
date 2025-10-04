@@ -35,9 +35,10 @@ constants exposed in `toptek/gui/__init__.py`.
 - **Typography styles** – `Header.TLabel`, `SubHeader.TLabel`, `Body.TLabel`,
   `Surface.TLabel`, `CardHeading.TLabel`, `MetricValue.TLabel`, and
   `MetricCaption.TLabel` keep copy aligned with the light-on-dark palette.
-- **Status styles** – `StatusInfo.TLabel` (for canvas backgrounds) and
-  `SurfaceStatus.TLabel` (for raised surfaces) hold highlights such as
-  verification outcomes and guard readiness.
+- **Status styles** – `StatusInfo.TLabel` (for canvas backgrounds),
+  `SurfaceStatus.TLabel` (for raised surfaces), and `GuardBadge.TLabel`
+  (compact guard chip) hold highlights such as verification outcomes and
+  guard readiness.
 - **Input styles** – `Input.TEntry`, `Input.TCombobox`, `Input.TSpinbox`,
   `Input.TRadiobutton`, and `Input.TCheckbutton` provide consistent field
   surfaces while default buttons consume either `Accent.TButton` (primary
@@ -67,7 +68,9 @@ constants exposed in `toptek/gui/__init__.py`.
    existing pattern: `DashboardCard.TFrame` containers with a heading label,
    `MetricValue.TLabel` for the primary figure, and `MetricCaption.TLabel` for
    the descriptive copy. Charts and rich panes should sit inside
-   `ChartContainer.TFrame` to inherit border and padding rules.
+   `ChartContainer.TFrame` to inherit border and padding rules. Guard status
+   surfaces should update the `GuardBadge.TLabel` copy instead of painting
+   ad-hoc colours so downstream tooling can parse guard transitions.
 
 ## Extending the theme
 

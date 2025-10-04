@@ -201,6 +201,13 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
         font=("Segoe UI", 10, "bold"),
     )
     style.configure(
+        "GuardBadge.TLabel",
+        background=DARK_PALETTE["surface_alt"],
+        foreground=DARK_PALETTE["accent_alt"],
+        font=("Segoe UI", 10, "bold"),
+        padding=(12, 4),
+    )
+    style.configure(
         "Guidance.TLabelframe",
         background=DARK_PALETTE["surface"],
         bordercolor=DARK_PALETTE["border"],

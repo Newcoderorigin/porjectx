@@ -82,3 +82,18 @@ GUI. Install [`PyYAML`](https://pyyaml.org/) if the command reports a missing
 dependency. The same report is serialised back into the `configs["trade"]`
 dictionary whenever the guard is refreshed, allowing downstream automation to
 respond when the status shifts between `OK` and `DEFENSIVE_MODE`.
+
+## Monitoring surface
+
+Operational dashboards can now import helpers from `toptek.monitor` to surface
+data quality and feed health at a glance:
+
+- `toptek.monitor.compute_drift_report` evaluates PSI/KS drift across a
+  DataFrame slice, returning feature-level and aggregate severities that the UI
+  can render as badges or alerts.
+- `toptek.monitor.build_latency_badge` converts a timestamp for the latest bar
+  into deterministic status copy (`Live`, `Lagging`, `Stalled`) based on latency
+  thresholds.
+
+Both utilities return frozen dataclasses to keep the API predictable for
+widgets, scripts, or automated monitors.

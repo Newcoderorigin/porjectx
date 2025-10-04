@@ -54,6 +54,9 @@ toptek/
     risk.py
     live.py
     utils.py
+  monitor/
+    drift.py
+    latency.py
   gui/
     app.py
     widgets.py
@@ -69,6 +72,18 @@ Configuration defaults live under the `config/` folder and are merged with value
 - `requirements-streaming.txt`: extends the lite profile with optional SignalR streaming support.
 - On start-up `python -m toptek.main` validates that NumPy/SciPy/scikit-learn match the vetted wheels and raises a friendly
   guidance error if the environment drifts. Reinstall with `pip install -r requirements-lite.txt` to resolve mismatches.
+
+## Monitoring helpers
+
+Use the `toptek.monitor` package to keep an eye on data quality and feed
+freshness:
+
+- `compute_drift_report` compares PSI/KS statistics between reference and
+  current windows, returning severity tiers per feature and overall so the GUI
+  can escalate drift badges deterministically.
+- `build_latency_badge` maps the latest bar timestamp to friendly status copy
+  (`Live`, `Lagging`, `Stalled`) based on configurable thresholds, making it
+  trivial to render latency pills in the dashboard header.
 
 ## Development notes
 

@@ -81,6 +81,7 @@ def train_classifier(
 
     if X.ndim != 2:
         raise ValueError("Feature matrix must be 2-dimensional")
+    original_feature_count = X.shape[1]
     y = np.asarray(y).ravel()
 
     if not np.isfinite(X).all() or not np.isfinite(y).all():

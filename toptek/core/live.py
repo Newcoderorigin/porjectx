@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Optional
+from typing import Dict
 
 from .gateway import ProjectXGateway
 
@@ -31,15 +31,21 @@ def poll_positions(context: ExecutionContext) -> Dict[str, object]:
 def connect_market_hub(*_, **__) -> None:  # pragma: no cover - stub
     """Placeholder for SignalR market hub connection."""
 
-    raise NotImplementedError("SignalR streaming is optional; install signalrcore to enable")
+    raise NotImplementedError(
+        "SignalR streaming is optional; install signalrcore to enable"
+    )
 
 
 def subscribe_ticker(*_, **__) -> None:  # pragma: no cover - stub
-    raise NotImplementedError("SignalR streaming is optional; install signalrcore to enable")
+    raise NotImplementedError(
+        "SignalR streaming is optional; install signalrcore to enable"
+    )
 
 
 def subscribe_bars(*_, **__) -> None:  # pragma: no cover - stub
-    raise NotImplementedError("SignalR streaming is optional; install signalrcore to enable")
+    raise NotImplementedError(
+        "SignalR streaming is optional; install signalrcore to enable"
+    )
 
 
 __all__ = [

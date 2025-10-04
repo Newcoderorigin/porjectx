@@ -248,11 +248,37 @@ class GuardStatus:
 
 
 @dataclass(frozen=True)
+class ReplayStatus:
+    idle: str = "Load a dataset to begin playback."
+    buffering: str = "Preparing replay dataset..."
+    playing: str = "Streaming simulator feed."
+    paused: str = "Replay paused."
+    complete: str = "Reached end of recording."
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "ReplayStatus":
+        return cls(
+            idle=_coerce_str(data.get("idle", cls.idle), "status.replay.idle"),
+            buffering=_coerce_str(
+                data.get("buffering", cls.buffering), "status.replay.buffering"
+            ),
+            playing=_coerce_str(
+                data.get("playing", cls.playing), "status.replay.playing"
+            ),
+            paused=_coerce_str(data.get("paused", cls.paused), "status.replay.paused"),
+            complete=_coerce_str(
+                data.get("complete", cls.complete), "status.replay.complete"
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class StatusMessages:
     login: LoginStatus = field(default_factory=LoginStatus)
     training: TrainingStatus = field(default_factory=TrainingStatus)
     backtest: BacktestStatus = field(default_factory=BacktestStatus)
     guard: GuardStatus = field(default_factory=GuardStatus)
+    replay: ReplayStatus = field(default_factory=ReplayStatus)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "StatusMessages":
@@ -261,6 +287,7 @@ class StatusMessages:
             training=TrainingStatus.from_mapping(data.get("training", {})),
             backtest=BacktestStatus.from_mapping(data.get("backtest", {})),
             guard=GuardStatus.from_mapping(data.get("guard", {})),
+            replay=ReplayStatus.from_mapping(data.get("replay", {})),
         )
 
 
@@ -330,6 +357,7 @@ __all__ = [
     "AppearanceSettings",
     "ShellSettings",
     "ChartSettings",
+    "ReplayStatus",
     "StatusMessages",
     "UIConfig",
     "load_ui_config",

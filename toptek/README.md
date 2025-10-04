@@ -62,7 +62,7 @@ Configuration defaults live under the `config/` folder and are merged with value
 
 ## Requirements profiles
 
-- `requirements-lite.txt`: minimal dependencies for polling workflows.
+- `requirements-lite.txt`: minimal dependencies for polling workflows. NumPy is capped below 1.28 so the bundled SciPy wheels stay importable; installing NumPy 2.x triggers a SciPy `ImportError` about missing manylinux-compatible binaries.
 - `requirements-streaming.txt`: extends the lite profile with optional SignalR streaming support.
 
 ## Development notes

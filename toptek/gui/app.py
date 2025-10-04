@@ -35,38 +35,80 @@ class ToptekApp(ttk.Notebook):
     def _build_tabs(self) -> None:
         from . import widgets
 
-        tabs = {
-            "Dashboard": (
-                widgets.DashboardTab,
+        tabs = [
+            (
+                "Dashboard",
+                lambda parent: widgets.DashboardTab(parent, self.configs, self.paths),
                 "Overview · Monitor readiness metrics before taking action.",
             ),
-            "Login": (
-                widgets.LoginTab,
+            (
+                "Login",
+                lambda parent: widgets.LoginTab(parent, self.configs, self.paths),
                 "Step 1 · Secure your API keys and verify environment access.",
             ),
-            "Research": (
-                widgets.ResearchTab,
+            (
+                "Research",
+                lambda parent: widgets.ResearchTab(parent, self.configs, self.paths),
                 "Step 2 · Explore market structure and feature snapshots.",
             ),
-            "Train": (
-                widgets.TrainTab,
+            (
+                "Train",
+                lambda parent: widgets.TrainTab(parent, self.configs, self.paths),
                 "Step 3 · Fit and calibrate models before risking capital.",
             ),
-            "Backtest": (
-                widgets.BacktestTab,
+            (
+                "Backtest",
+                lambda parent: widgets.BacktestTab(parent, self.configs, self.paths),
                 "Step 4 · Validate expectancy and drawdown resilience.",
             ),
-            "Replay": (
-                widgets.ReplayTab,
+            (
+                "Replay",
+                lambda parent: widgets.ReplayTab(parent, self.configs, self.paths),
                 "Step 5 · Rehearse the playbook against recorded sessions before trading live.",
             ),
-            "Trade": (
-                widgets.TradeTab,
+            (
+                "Trade",
+                lambda parent: widgets.TradeTab(parent, self.configs, self.paths),
                 "Step 6 · Check Topstep guardrails and plan manual execution.",
             ),
-        }
-        for name, (cls, guidance) in tabs.items():
-            frame = cls(self, self.configs, self.paths)
+        ]
+
+        lm_config = self.configs.get("lmstudio", {})
+        if lm_config.get("enabled"):
+            try:
+                from toptek.lmstudio import build_client
+                from toptek.ui import LiveTab as LMStudioLiveTab
+
+                lm_client = build_client(lm_config)
+            except Exception:  # pragma: no cover - defensive
+                lm_client = None
+                LMStudioLiveTab = None  # type: ignore[assignment]
+            if LMStudioLiveTab is not None:
+                tabs.append(
+                    (
+                        "Live",
+                        lambda parent: LMStudioLiveTab(parent, lm_config, client=lm_client),
+                        "Live · Chat with LM Studio and monitor response latency.",
+                    )
+                )
+
+        research_config = self.configs.get("futures_research", {})
+        if research_config.get("enabled"):
+            try:
+                from toptek.ui import FuturesResearchTab
+            except Exception:  # pragma: no cover - defensive
+                FuturesResearchTab = None  # type: ignore[assignment]
+            if FuturesResearchTab is not None:
+                tabs.append(
+                    (
+                        "Futures",
+                        lambda parent: FuturesResearchTab(parent, research_config),
+                        "Research · Inspect futures history via Yahoo Finance.",
+                    )
+                )
+
+        for name, factory, guidance in tabs:
+            frame = factory(self)
             self.add(frame, text=name)
             self._tab_names.append(name)
             self._tab_guidance[name] = guidance

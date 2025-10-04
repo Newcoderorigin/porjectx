@@ -70,6 +70,7 @@ def patched_main(monkeypatch):
 def test_main_surfaces_numeric_stack_error(monkeypatch, patched_main):
     """Stack mismatch should raise a helpful RuntimeError before SciPy loads."""
 
+    monkeypatch.setattr(patched_main.sys, "version_info", (3, 11, 0))
     monkeypatch.setitem(utils.STACK_REQUIREMENTS, "numpy", ">=999.0")
     with pytest.raises(RuntimeError) as excinfo:
         patched_main.main()
@@ -77,3 +78,14 @@ def test_main_surfaces_numeric_stack_error(monkeypatch, patched_main):
     assert "Incompatible numeric stack" in message
     assert "numpy" in message
     assert "pip install -r toptek/requirements-lite.txt" in message
+
+
+def test_main_blocks_python_312(monkeypatch, patched_main):
+    """The runtime guard should block unsupported Python interpreters."""
+
+    monkeypatch.setattr(patched_main.sys, "version_info", (3, 12, 0))
+    with pytest.raises(RuntimeError) as excinfo:
+        patched_main.main()
+    message = str(excinfo.value)
+    assert "Python 3.12+" in message
+    assert "Python 3.10 or 3.11" in message

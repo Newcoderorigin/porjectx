@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Dict
 
 import pytest
@@ -54,6 +55,9 @@ def _restore_argv(monkeypatch):
 def patched_main(monkeypatch):
     """Keep ``main`` deterministic when the guard allows execution."""
 
+    sys.modules.setdefault(
+        "dotenv", SimpleNamespace(load_dotenv=lambda *_args, **_kwargs: None)
+    )
     import toptek.main as main_module
 
     def _fake_load_configs():

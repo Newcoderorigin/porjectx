@@ -28,7 +28,9 @@ class ContractSymbol:
         return f"{self.root}{self.month}{self.year % 10}"
 
 
-def validate_symbol(symbol: str, *, allowed_roots: Iterable[str] | None = None) -> ContractSymbol:
+def validate_symbol(
+    symbol: str, *, allowed_roots: Iterable[str] | None = None
+) -> ContractSymbol:
     """Validate a futures symbol, raising ``ValueError`` if invalid."""
 
     symbol = symbol.upper().strip()

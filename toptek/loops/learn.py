@@ -11,7 +11,12 @@ import pandas as pd
 
 from toptek.data import io
 from toptek.features import build_features
-from toptek.model.train import TrainConfig, load_config as load_train_config, save_artifacts, train_bundle
+from toptek.model.train import (
+    TrainConfig,
+    load_config as load_train_config,
+    save_artifacts,
+    train_bundle,
+)
 
 
 def _load_loop_config(path: Path) -> TrainConfig:
@@ -23,7 +28,13 @@ def _gather_user_data(conn) -> pd.DataFrame:
     predictions = pd.read_sql_query("SELECT * FROM model_predictions", conn)
     trades["entry_ts"] = pd.to_datetime(trades["entry_ts"])
     predictions["ts"] = pd.to_datetime(predictions["ts"])
-    merged = trades.merge(predictions, left_on="entry_ts", right_on="ts", how="left", suffixes=("_trade", "_pred"))
+    merged = trades.merge(
+        predictions,
+        left_on="entry_ts",
+        right_on="ts",
+        how="left",
+        suffixes=("_trade", "_pred"),
+    )
     return merged
 
 
@@ -65,7 +76,11 @@ def main() -> None:
         "artifacts": {k: str(v) for k, v in artifacts.items()},
     }
     report_path = _save_report(report, root)
-    print(json.dumps({"status": "completed", "report": str(report_path), "metrics": metrics}))
+    print(
+        json.dumps(
+            {"status": "completed", "report": str(report_path), "metrics": metrics}
+        )
+    )
 
 
 if __name__ == "__main__":

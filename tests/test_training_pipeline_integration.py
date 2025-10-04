@@ -6,14 +6,16 @@ import argparse
 import logging
 from types import SimpleNamespace
 
-import numpy as np
-import pandas as pd
 import pytest
 
-from toptek.core import utils
-from toptek.features import FeatureBundle
-from toptek.gui.widgets import TrainTab
-from toptek.main import run_cli
+np = pytest.importorskip("numpy")
+pd = pytest.importorskip("pandas")
+pytest.importorskip("sklearn")
+
+from toptek.core import utils  # noqa: E402
+from toptek.features import FeatureBundle  # noqa: E402
+from toptek.gui.widgets import TrainTab  # noqa: E402
+from toptek.main import run_cli  # noqa: E402
 
 
 def _sample_dataframe(rows: int = 128) -> pd.DataFrame:
@@ -65,11 +67,22 @@ def test_cli_training_consumes_feature_bundle(monkeypatch, tmp_path, caplog) -> 
 
     monkeypatch.setattr("toptek.main.build_features", fake_build_features)
     monkeypatch.setattr("toptek.main.model.train_classifier", fake_train_classifier)
-    monkeypatch.setattr("toptek.main.data.sample_dataframe", lambda: _sample_dataframe(140))
+    monkeypatch.setattr(
+        "toptek.main.data.sample_dataframe", lambda: _sample_dataframe(140)
+    )
 
-    args = argparse.Namespace(cli="train", model="logistic", symbol="ES", timeframe="5m", lookback="90d", start=None)
+    args = argparse.Namespace(
+        cli="train",
+        model="logistic",
+        symbol="ES",
+        timeframe="5m",
+        lookback="90d",
+        start=None,
+    )
     configs = {"risk": {}, "app": {}, "features": {}}
-    paths = utils.AppPaths(root=tmp_path, cache=tmp_path / "cache", models=tmp_path / "models")
+    paths = utils.AppPaths(
+        root=tmp_path, cache=tmp_path / "cache", models=tmp_path / "models"
+    )
 
     run_cli(args, configs, paths)
 
@@ -122,8 +135,12 @@ def test_train_tab_uses_feature_bundle(monkeypatch, tmp_path, caplog) -> None:
         )
 
     monkeypatch.setattr("toptek.gui.widgets.build_features", fake_build_features)
-    monkeypatch.setattr("toptek.gui.widgets.sample_dataframe", lambda rows: _sample_dataframe(rows))
-    monkeypatch.setattr("toptek.gui.widgets.model.train_classifier", fake_train_classifier)
+    monkeypatch.setattr(
+        "toptek.gui.widgets.sample_dataframe", lambda rows: _sample_dataframe(rows)
+    )
+    monkeypatch.setattr(
+        "toptek.gui.widgets.model.train_classifier", fake_train_classifier
+    )
     monkeypatch.setattr("tkinter.messagebox.showwarning", lambda *args, **kwargs: None)
     monkeypatch.setattr("tkinter.messagebox.showinfo", lambda *args, **kwargs: None)
 
@@ -131,7 +148,9 @@ def test_train_tab_uses_feature_bundle(monkeypatch, tmp_path, caplog) -> None:
     notebook.pack()
 
     configs: dict[str, dict[str, object]] = {}
-    paths = utils.AppPaths(root=tmp_path, cache=tmp_path / "cache", models=tmp_path / "models")
+    paths = utils.AppPaths(
+        root=tmp_path, cache=tmp_path / "cache", models=tmp_path / "models"
+    )
 
     tab = TrainTab(notebook, configs, paths)
     tab.calibrate_var.set(False)

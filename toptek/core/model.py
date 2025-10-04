@@ -118,7 +118,9 @@ def train_classifier(
         valid_column_mask = ~col_all_nan
         X = X[:, valid_column_mask]
         if X.shape[1] == 0:
-            raise ValueError("All feature columns were empty after cleaning; cannot train")
+            raise ValueError(
+                "All feature columns were empty after cleaning; cannot train"
+            )
         retained_columns = tuple(int(idx) for idx in np.flatnonzero(valid_column_mask))
     else:
         retained_columns = None
@@ -246,7 +248,9 @@ def calibrate_classifier(
         if indices.ndim != 1:
             raise ValueError("Feature mask must be a 1-D sequence of column indices")
         if indices.size == 0:
-            raise ValueError("Feature mask is empty; cannot realign calibration features")
+            raise ValueError(
+                "Feature mask is empty; cannot realign calibration features"
+            )
         if (indices < 0).any():
             raise ValueError("Feature mask cannot include negative column indices")
         if not np.all(np.diff(indices) >= 0):
@@ -294,7 +298,9 @@ def calibrate_classifier(
         )
     calibrator = CalibratedClassifierCV(estimator=pipeline, method=method, cv="prefit")
     calibrator.fit(X_cal, y_cal)
-    target_path = output_path or model_path.with_name(f"{model_path.stem}_calibrated.pkl")
+    target_path = output_path or model_path.with_name(
+        f"{model_path.stem}_calibrated.pkl"
+    )
     with target_path.open("wb") as handle:
         pickle.dump(calibrator, handle)
     return target_path

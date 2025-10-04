@@ -2,9 +2,12 @@
 
 from pathlib import Path
 
-import numpy as np
+import pytest
 
-from toptek.core.model import train_classifier
+np = pytest.importorskip("numpy")
+pytest.importorskip("sklearn")
+
+from toptek.core.model import train_classifier  # noqa: E402
 
 
 def test_train_classifier_records_original_feature_count(tmp_path: Path) -> None:

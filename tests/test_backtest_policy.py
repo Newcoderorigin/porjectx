@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pandas as pd
-import yaml
+import pytest
 
-from toptek.backtest import run as backtest_run
-from toptek.data import io
-from toptek.features import build_features
-from toptek.model import train as train_module
+yaml = pytest.importorskip("yaml")
+
+pd = pytest.importorskip("pandas")
+pytest.importorskip("numpy")
+pytest.importorskip("sklearn")
+
+from toptek.backtest import run as backtest_run  # noqa: E402
+from toptek.data import io  # noqa: E402
+from toptek.features import build_features  # noqa: E402
+from toptek.model import train as train_module  # noqa: E402
 
 
 def _write_config(root: Path) -> Path:
@@ -42,7 +47,9 @@ def test_threshold_backtest_improves_metrics(tmp_path, monkeypatch) -> None:
     original_paths_cls = io.IOPaths
 
     def _mock_paths() -> io.IOPaths:
-        return original_paths_cls(root=tmp_path, var=var_dir, data=data_dir, db=var_dir / "toptek.db")
+        return original_paths_cls(
+            root=tmp_path, var=var_dir, data=data_dir, db=var_dir / "toptek.db"
+        )
 
     monkeypatch.setattr(io, "IOPaths", _mock_paths)
     monkeypatch.setattr(io, "DATA_DIR", data_dir)

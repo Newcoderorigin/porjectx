@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
 import pytest
 
-from toptek.features import build_features
+np = pytest.importorskip("numpy")
+pd = pytest.importorskip("pandas")
+
+from toptek.features import build_features  # noqa: E402
 
 
 def _sample_dataframe(rows: int = 128) -> pd.DataFrame:

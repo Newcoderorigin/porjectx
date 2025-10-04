@@ -59,7 +59,9 @@ def load_config(path: Path) -> TrainConfig:
         min_expected_value=float(raw["threshold"].get("min_expected_value", 0.0)),
         avg_win=float(raw["economics"].get("avg_win", 1.0)),
         avg_loss=float(raw["economics"].get("avg_loss", 1.0)),
-        fees=float(raw["fees"].get("per_trade", 0.0) + raw["fees"].get("slippage", 0.0)),
+        fees=float(
+            raw["fees"].get("per_trade", 0.0) + raw["fees"].get("slippage", 0.0)
+        ),
     )
 
 
@@ -74,7 +76,9 @@ def _expected_value(hit_rate: float, config: TrainConfig) -> float:
     return gross - config.fees
 
 
-def train_bundle(bundle: FeatureBundle, config: TrainConfig) -> Tuple[CalibratedClassifierCV, Dict[str, Any]]:
+def train_bundle(
+    bundle: FeatureBundle, config: TrainConfig
+) -> Tuple[CalibratedClassifierCV, Dict[str, Any]]:
     X = bundle.X
     y = bundle.y
     X_train, X_test, y_train, y_test = train_test_split(
@@ -86,15 +90,21 @@ def train_bundle(bundle: FeatureBundle, config: TrainConfig) -> Tuple[Calibrated
         random_state=config.seed,
     )
 
-    base_model = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=config.seed)
+    base_model = LogisticRegression(
+        max_iter=1000, class_weight="balanced", random_state=config.seed
+    )
     base_model.fit(X_train, y_train)
 
     try:
-        calibrator = CalibratedClassifierCV(base_estimator=base_model, method=config.method, cv="prefit")
+        calibrator = CalibratedClassifierCV(
+            base_estimator=base_model, method=config.method, cv="prefit"
+        )
         calibrator.fit(X_test, y_test)
     except ValueError:
         fallback = "sigmoid" if config.method != "sigmoid" else "isotonic"
-        calibrator = CalibratedClassifierCV(base_estimator=base_model, method=fallback, cv="prefit")
+        calibrator = CalibratedClassifierCV(
+            base_estimator=base_model, method=fallback, cv="prefit"
+        )
         calibrator.fit(X_test, y_test)
 
     probs = calibrator.predict_proba(X_test)[:, 1]
@@ -114,7 +124,12 @@ def train_bundle(bundle: FeatureBundle, config: TrainConfig) -> Tuple[Calibrated
     return calibrator, metrics
 
 
-def save_artifacts(calibrator: CalibratedClassifierCV, metrics: Dict[str, Any], meta: Dict[str, Any], config: TrainConfig) -> Dict[str, Path]:
+def save_artifacts(
+    calibrator: CalibratedClassifierCV,
+    metrics: Dict[str, Any],
+    meta: Dict[str, Any],
+    config: TrainConfig,
+) -> Dict[str, Path]:
     config.models_dir.mkdir(parents=True, exist_ok=True)
     model_path = config.models_dir / "model.pkl"
     calibrator_path = config.models_dir / "calibrator.pkl"

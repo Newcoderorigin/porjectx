@@ -4,20 +4,23 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple, TYPE_CHECKING, cast
 
-import numpy as np
 from dotenv import load_dotenv
 
-from core import backtest, data, model, risk, ui_config, utils
-from toptek.features import build_features
+from toptek.core import utils
+
+if TYPE_CHECKING:  # pragma: no cover - hints only
+    from toptek.core.ui_config import UIConfig
 
 
 ROOT = Path(__file__).parent
 
 
-def load_configs() -> Tuple[Dict[str, Dict[str, object]], ui_config.UIConfig]:
+def load_configs() -> Tuple[Dict[str, Dict[str, object]], "UIConfig"]:
     """Load configuration files along with UI defaults."""
+
+    from toptek.core import ui_config
 
     app_cfg = utils.load_yaml(ROOT / "config" / "app.yml")
     risk_cfg = utils.load_yaml(ROOT / "config" / "risk.yml")
@@ -42,6 +45,11 @@ def run_cli(
 ) -> None:
     """Dispatch CLI commands based on ``args``."""
 
+    import numpy as np
+
+    from toptek.core import backtest, data, model, risk
+    from toptek.features import build_features
+
     logger = utils.build_logger("toptek")
     logger.info(
         "CLI mode=%s symbol=%s timeframe=%s lookback=%s fps=%s",
@@ -51,13 +59,17 @@ def run_cli(
         args.lookback,
         getattr(args, "fps", None),
     )
+    risk_config = cast(Dict[str, Any], configs["risk"])
     risk_profile = risk.RiskProfile(
-        max_position_size=configs["risk"].get("max_position_size", 1),
-        max_daily_loss=configs["risk"].get("max_daily_loss", 1000),
-        restricted_hours=configs["risk"].get("restricted_trading_hours", []),
-        atr_multiplier_stop=configs["risk"].get("atr_multiplier_stop", 2.0),
-        cooldown_losses=configs["risk"].get("cooldown_losses", 2),
-        cooldown_minutes=configs["risk"].get("cooldown_minutes", 30),
+        max_position_size=int(risk_config.get("max_position_size", 1)),
+        max_daily_loss=float(risk_config.get("max_daily_loss", 1000)),
+        restricted_hours=cast(
+            list[dict[str, str]],
+            risk_config.get("restricted_trading_hours", []),
+        ),
+        atr_multiplier_stop=float(risk_config.get("atr_multiplier_stop", 2.0)),
+        cooldown_losses=int(risk_config.get("cooldown_losses", 2)),
+        cooldown_minutes=int(risk_config.get("cooldown_minutes", 30)),
     )
 
     lookback = int(args.lookback)
@@ -130,7 +142,7 @@ def run_cli(
         logger.error("Unknown CLI command: %s", args.cli)
 
 
-def parse_args(settings: ui_config.UIConfig) -> argparse.Namespace:
+def parse_args(settings: "UIConfig") -> argparse.Namespace:
     """Parse command-line arguments with defaults sourced from ``settings``."""
 
     parser = argparse.ArgumentParser(description="Toptek manual trading toolkit")
@@ -167,14 +179,14 @@ def parse_args(settings: ui_config.UIConfig) -> argparse.Namespace:
 
 
 def _apply_cli_overrides(
-    settings: ui_config.UIConfig,
+    settings: "UIConfig",
     *,
     symbol: str | None,
     timeframe: str | None,
     lookback: int | None,
     model_name: str | None,
     fps: int | None,
-) -> ui_config.UIConfig:
+) -> "UIConfig":
     shell_updates: Dict[str, object] = {}
     chart_updates: Dict[str, object] = {}
     if symbol is not None:
@@ -198,6 +210,7 @@ def _apply_cli_overrides(
 def main() -> None:
     """Program entry point."""
 
+    utils.assert_numeric_stack()
     load_dotenv(ROOT / ".env")
     configs, ui_settings = load_configs()
     paths = utils.build_paths(ROOT, configs["app"])

@@ -1,0 +1,18 @@
+seed: 42
+data:
+  bars_parquet: data/demo_bars.parquet
+model:
+  type: logistic
+  calibration: isotonic
+threshold:
+  min_coverage: 0.30
+  min_expected_value: 0.0
+economics:
+  avg_win: 85.0
+  avg_loss: 60.0
+fees:
+  per_trade: 2.5
+  slippage: 1.0
+output:
+  models_dir: models
+  cache_dir: .cache

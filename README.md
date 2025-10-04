@@ -82,3 +82,33 @@ GUI. Install [`PyYAML`](https://pyyaml.org/) if the command reports a missing
 dependency. The same report is serialised back into the `configs["trade"]`
 dictionary whenever the guard is refreshed, allowing downstream automation to
 respond when the status shifts between `OK` and `DEFENSIVE_MODE`.
+
+## Monitoring surface
+
+Operational dashboards can now import helpers from `toptek.monitor` to surface
+data quality and feed health at a glance:
+
+- `toptek.monitor.compute_drift_report` evaluates PSI/KS drift across a
+  DataFrame slice, returning feature-level and aggregate severities that the UI
+  can render as badges or alerts.
+- `toptek.monitor.build_latency_badge` converts a timestamp for the latest bar
+  into deterministic status copy (`Live`, `Lagging`, `Stalled`) based on latency
+  thresholds.
+
+Both utilities return frozen dataclasses to keep the API predictable for
+widgets, scripts, or automated monitors.
+
+## Data bank, nightly prep, and live surfaces
+
+- `python -m toptek.databank.bank ingest --symbol ES --timeframe 5m --days 365`
+  writes deterministic synthetic OHLCV bars under `data/bank/ES/5m` and maintains
+  a catalog for downstream loaders.
+- `python -m toptek.pipelines.prep_nightly --date YYYY-MM-DD` executes the full
+  nightly prep flow (ingest → features → train → calibrate → drift check) and
+  emits a daily brief JSON, a threshold curve plot, and a versioned model card.
+- `toptek.confidence.score_probabilities` powers the new confidence ring widget
+  displayed in the Train, Backtest, and Trade tabs.
+- `toptek.advisor.engine.AdvisorEngine` streams a synthetic research brief with
+  risk buckets, ATR%, and three actionable bullets for chat intents.
+- `bench/run_bench.py` captures a deterministic baseline; exporting `PERF_CHECK=1`
+  when running `pytest` enables the gated perf regression test.

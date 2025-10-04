@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
-import tkinter as tk
-from tkinter import ttk
 from typing import List, Mapping, MutableSequence
+
+try:  # pragma: no cover - exercised via import behaviour
+    import tkinter as tk
+    from tkinter import ttk
+except ModuleNotFoundError:  # pragma: no cover - headless environments
+    tk = None  # type: ignore[assignment]
+    ttk = None  # type: ignore[assignment]
 
 from toptek import filters
 from toptek.gui import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
 from toptek.lmstudio import LMStudioClient, build_client
 
 
-class LiveTab(ttk.Frame):
+_BaseFrame = ttk.Frame if ttk is not None else object
+
+
+class LiveTab(_BaseFrame):
     """Simple chat interface for LM Studio."""
 
     def __init__(
@@ -21,7 +29,9 @@ class LiveTab(ttk.Frame):
         *,
         client: LMStudioClient | None = None,
     ) -> None:
-        super().__init__(master, style="DashboardBackground.TFrame")
+        if tk is None or ttk is None:
+            raise RuntimeError("Tkinter is not available for LiveTab")
+        super().__init__(master, style="DashboardBackground.TFrame")  # type: ignore[misc]
         self._config = dict(config)
         self._client = client or build_client(self._config)
         self._messages: MutableSequence[Mapping[str, str]] = []

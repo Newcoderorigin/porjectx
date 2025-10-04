@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import csv
 import io
-import tkinter as tk
 from datetime import datetime, timedelta, timezone
-from tkinter import ttk
 from typing import List, Mapping, MutableSequence
 import urllib.error
 import urllib.parse
 import urllib.request
+
+try:  # pragma: no cover - exercised via import behaviour
+    import tkinter as tk
+    from tkinter import ttk
+except ModuleNotFoundError:  # pragma: no cover - headless environments
+    tk = None  # type: ignore[assignment]
+    ttk = None  # type: ignore[assignment]
 
 from toptek.gui import DARK_PALETTE
 
@@ -51,11 +56,16 @@ def fetch_futures_history(symbol: str, interval: str, days: int = 30) -> List[Ma
     return records
 
 
-class FuturesResearchTab(ttk.Frame):
+_BaseFrame = ttk.Frame if ttk is not None else object
+
+
+class FuturesResearchTab(_BaseFrame):
     """UI wrapper for futures research tooling."""
 
     def __init__(self, master: ttk.Notebook, config: Mapping[str, object]) -> None:
-        super().__init__(master, style="DashboardBackground.TFrame")
+        if tk is None or ttk is None:
+            raise RuntimeError("Tkinter is not available for FuturesResearchTab")
+        super().__init__(master, style="DashboardBackground.TFrame")  # type: ignore[misc]
         self._config = dict(config)
         self.symbol_var = tk.StringVar(value=str(self._config.get("default_symbol", "ES=F")))
         self.interval_var = tk.StringVar(value=str(self._config.get("default_interval", "1d")))

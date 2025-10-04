@@ -227,7 +227,58 @@ class TrainTab(BaseTab):
         feat_map = features.compute_features(df)
         X = np.column_stack(list(feat_map.values()))
         y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
-        result = model.train_classifier(X, y, model_type=self.model_type.get(), models_dir=self.paths.models)
+
+        unique_labels = np.unique(y)
+        if unique_labels.size < 2:
+            self.status.config(
+                text="Training aborted: target labels lack class diversity.", foreground="#b91c1c"
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "Training requires at least two classes after cleaning the dataset.\n"
+                    "Collect more data or adjust preprocessing to obtain both up and down samples."
+                ),
+            )
+            return
+
+        try:
+            result = model.train_classifier(
+                X, y, model_type=self.model_type.get(), models_dir=self.paths.models
+            )
+        except ValueError as exc:
+            self.status.config(
+                text="Training failed due to invalid feature matrix. Review warnings.",
+                foreground="#b91c1c",
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "The classifier could not be trained with the current dataset.\n\n"
+                    f"Details: {exc}"
+                ),
+            )
+            self.log_event(f"Model training failed: {exc}", level="error")
+            return
+        preprocessing = result.preprocessing or {}
+        prep_notes = []
+        if preprocessing.get("imputed_cells"):
+            prep_notes.append(
+                f"imputed {preprocessing['imputed_cells']} feature values"
+            )
+        if preprocessing.get("dropped_rows"):
+            prep_notes.append(
+                f"dropped {preprocessing['dropped_rows']} all-NaN rows"
+            )
+        if preprocessing.get("dropped_columns"):
+            prep_notes.append(
+                f"removed {preprocessing['dropped_columns']} empty columns"
+            )
+        if prep_notes:
+            self.log_event(
+                "Preprocessing summary: " + ", ".join(prep_notes),
+                level="info",
+            )
         calibrate_report = "skipped"
         calibration_failed = False
         if self.calibrate_var.get() and len(X) > 60:
@@ -266,6 +317,7 @@ class TrainTab(BaseTab):
             "model": self.model_type.get(),
             "metrics": result.metrics,
             "threshold": result.threshold,
+            "preprocessing": preprocessing,
             "calibration": calibrate_report,
         }
         self.output.insert(tk.END, json_dumps(payload))
@@ -401,6 +453,22 @@ class TradeTab(BaseTab):
         }
         self.output.delete("1.0", tk.END)
         self.output.insert(tk.END, json_dumps(payload))
+
+        guard_message = (
+            "Topstep guard assessment completed.\n\n"
+            f"Suggested contracts: {sample_size}.\n"
+            f"Daily loss cap: ${profile.max_daily_loss}.\n"
+            "Cooldown policy: "
+            f"{profile.cooldown_losses} losses → wait {profile.cooldown_minutes} minutes."
+        )
+
+        if guard == "OK":
+            messagebox.showinfo("Topstep Guard", guard_message)
+        else:
+            warning_message = (
+                f"{guard_message}\n\nDEFENSIVE_MODE active. Stand down and review your journal before trading."
+            )
+            messagebox.showwarning("Topstep Guard", warning_message)
 
 
 __all__ = [

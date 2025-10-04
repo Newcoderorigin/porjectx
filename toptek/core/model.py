@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pickle
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -13,6 +13,8 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 
 
 @dataclass
@@ -22,6 +24,7 @@ class TrainResult:
     model_path: Path
     metrics: Dict[str, float]
     threshold: float
+    preprocessing: Dict[str, int] = field(default_factory=dict)
 
 
 def train_classifier(
@@ -32,19 +35,75 @@ def train_classifier(
     models_dir: Path,
     threshold: float = 0.65,
 ) -> TrainResult:
-    """Train a basic classifier and persist it to ``models_dir``."""
+    """Train a basic classifier and persist it to ``models_dir``.
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True, random_state=42)
+    The training routine converts non-finite feature values to ``NaN``, drops rows and
+    columns that are entirely missing, and applies a median :class:`SimpleImputer`
+    before fitting the estimator. Summary statistics about these preprocessing steps
+    are returned in the :class:`TrainResult`.
+
+    Raises
+    ------
+    ValueError
+        If the feature matrix is not two-dimensional, lacks usable rows or columns
+        after cleaning, contains invalid target values, or the target labels collapse
+        into a single class.
+    """
+
+    if X.ndim != 2:
+        raise ValueError("Feature matrix must be 2-dimensional")
+
+    X = np.asarray(X, dtype=float)
+    y = np.asarray(y).ravel()
+
+    if not np.isfinite(y).all():
+        raise ValueError("Target labels contain NaN or inf values; clean the labels before training")
+
+    non_finite_mask = ~np.isfinite(X)
+    imputed_cells = int(non_finite_mask.sum())
+    if imputed_cells:
+        X = X.copy()
+        X[non_finite_mask] = np.nan
+
+    row_all_nan = np.isnan(X).all(axis=1)
+    dropped_rows = int(row_all_nan.sum())
+    if dropped_rows:
+        X = X[~row_all_nan]
+        y = y[~row_all_nan]
+
+    if X.size == 0:
+        raise ValueError("No valid feature rows remain after removing all-NaN rows")
+
+    col_all_nan = np.isnan(X).all(axis=0)
+    dropped_columns = int(col_all_nan.sum())
+    if dropped_columns:
+        X = X[:, ~col_all_nan]
+        if X.shape[1] == 0:
+            raise ValueError("All feature columns were empty after cleaning; cannot train")
+
+    if np.unique(y).size < 2:
+        raise ValueError("Training requires at least two target classes")
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, shuffle=True, random_state=42
+    )
 
     if model_type == "logistic":
-        model = LogisticRegression(max_iter=1000)
+        classifier = LogisticRegression(max_iter=1000)
     elif model_type == "gbm":
-        model = GradientBoostingClassifier()
+        classifier = GradientBoostingClassifier()
     else:
         raise ValueError("Unknown model type")
 
-    model.fit(X_train, y_train)
-    proba = model.predict_proba(X_test)[:, 1]
+    pipeline = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", classifier),
+        ]
+    )
+
+    pipeline.fit(X_train, y_train)
+    proba = pipeline.predict_proba(X_test)[:, 1]
     preds = (proba >= threshold).astype(int)
     metrics = {
         "accuracy": float(accuracy_score(y_test, preds)),
@@ -53,8 +112,17 @@ def train_classifier(
     models_dir.mkdir(parents=True, exist_ok=True)
     model_path = models_dir / f"{model_type}_model.pkl"
     with model_path.open("wb") as handle:
-        pickle.dump(model, handle)
-    return TrainResult(model_path=model_path, metrics=metrics, threshold=threshold)
+        pickle.dump(pipeline, handle)
+    return TrainResult(
+        model_path=model_path,
+        metrics=metrics,
+        threshold=threshold,
+        preprocessing={
+            "imputed_cells": imputed_cells,
+            "dropped_rows": dropped_rows,
+            "dropped_columns": dropped_columns,
+        },
+    )
 
 
 def load_model(model_path: Path):

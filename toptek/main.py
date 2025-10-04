@@ -43,7 +43,19 @@ def run_cli(args: argparse.Namespace, configs: Dict[str, Dict[str, object]], pat
     y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
 
     if args.cli == "train":
-        result = model.train_classifier(X, y, model_type=args.model, models_dir=paths.models)
+        try:
+            result = model.train_classifier(X, y, model_type=args.model, models_dir=paths.models)
+        except ValueError as exc:
+            logger.error("Training failed: %s", exc)
+            return
+        preprocess = result.preprocessing or {}
+        if preprocess:
+            logger.info(
+                "Preprocessing summary: imputed=%s dropped_rows=%s dropped_columns=%s",
+                preprocess.get("imputed_cells", 0),
+                preprocess.get("dropped_rows", 0),
+                preprocess.get("dropped_columns", 0),
+            )
         logger.info("Training complete: metrics=%s threshold=%.2f", result.metrics, result.threshold)
     elif args.cli == "backtest":
         returns = np.log(df["close"]).diff().fillna(0).to_numpy()

@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, Iterable, List
 import tkinter as tk
 from tkinter import ttk
 
-from core.utils import json_dumps
+from toptek.core import utils
 
 from . import TEXT_WIDGET_DEFAULTS
 
@@ -204,7 +204,7 @@ class LiveTab(ttk.Frame):
         metrics["last_refresh"] = datetime.now(tz=timezone.utc).isoformat()
         self.metrics_state.update(metrics)
         self.metrics_output.delete("1.0", tk.END)
-        self.metrics_output.insert("1.0", json_dumps(metrics, indent=2))
+        self.metrics_output.insert("1.0", utils.json_dumps(metrics, indent=2))
         self.metrics_output.see("1.0")
         self.configs.setdefault("live", {})["metrics"] = dict(self.metrics_state)
         return metrics

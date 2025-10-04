@@ -375,8 +375,6 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     simulator.start()
     try:
         while True:
-            if not simulator.running and queue.empty():
-                break
             try:
                 bar = queue.get(timeout=0.25)
             except Empty:

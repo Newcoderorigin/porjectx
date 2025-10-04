@@ -284,6 +284,7 @@ class TrainTab(BaseTab):
                 level="info",
             )
         calibrate_report = "skipped"
+        calibration_detail: str | None = None
         calibration_failed = False
         if self.calibrate_var.get() and len(X) > 60:
             cal_size = max(60, int(len(X) * 0.2))
@@ -302,6 +303,7 @@ class TrainTab(BaseTab):
                 )
             except (ValueError, RuntimeError) as exc:
                 calibrate_report = f"calibration failed: {exc}"
+                calibration_detail = calibrate_report
                 calibration_failed = True
                 self.log_event(
                     f"Calibration failed for {result.model_path.name}: {exc}",
@@ -321,10 +323,12 @@ class TrainTab(BaseTab):
                 )
             else:
                 calibrate_report = f"calibrated → {calibrated_path.name}"
+                calibration_detail = calibrate_report
                 self.log_event(
                     f"Calibration completed for {result.model_path.name} → {calibrated_path.name}",
                     level="info",
                 )
+        calibrate_value = calibrate_report if not calibration_failed else "skipped"
         self.output.delete("1.0", tk.END)
         payload = {
             "model": self.model_type.get(),
@@ -333,7 +337,8 @@ class TrainTab(BaseTab):
             "preprocessing": preprocessing,
             "retained_columns": list(result.retained_columns) if result.retained_columns is not None else None,
             "original_feature_count": result.original_feature_count,
-            "calibration": calibrate_report,
+            "calibration": calibrate_value,
+            "calibration_detail": calibration_detail,
         }
         self.output.insert(tk.END, json_dumps(payload))
         self.update_section("training", payload)

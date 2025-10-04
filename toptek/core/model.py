@@ -1,4 +1,18 @@
-"""Simple machine-learning helpers for classification models."""
+"""Simple machine-learning helpers for classification models.
+
+This module offers light-weight wrappers around scikit-learn estimators to
+standardise the training and calibration workflows used by the Toptek GUI and
+CLI tools.
+
+Example
+-------
+>>> import numpy as np
+>>> from pathlib import Path
+>>> X = np.random.randn(200, 6)
+>>> y = (X[:, 0] > 0).astype(int)
+>>> result = train_classifier(X, y, models_dir=Path("models"))
+>>> _ = calibrate_classifier(result.model_path, (X[:40], y[:40]))
+"""
 
 from __future__ import annotations
 
@@ -19,7 +33,26 @@ from sklearn.pipeline import Pipeline
 
 @dataclass
 class TrainResult:
-    """Container for training outcomes."""
+    """Container for training outcomes.
+
+    Attributes
+    ----------
+    model_path:
+        Filesystem location of the persisted estimator pipeline.
+    metrics:
+        Dictionary containing evaluation metrics computed on the validation
+        split.
+    threshold:
+        Decision threshold used when deriving discrete class predictions from
+        probabilities.
+    preprocessing:
+        Summary statistics describing how the feature matrix was sanitised.
+    retained_columns:
+        Tuple of retained column indices relative to the original feature
+        matrix. ``None`` when no trimming occurred.
+    original_feature_count:
+        Column count observed before preprocessing.
+    """
 
     model_path: Path
     metrics: Dict[str, float]
@@ -39,10 +72,26 @@ def train_classifier(
 ) -> TrainResult:
     """Train a basic classifier and persist it to ``models_dir``.
 
-    The training routine converts non-finite feature values to ``NaN``, drops rows and
-    columns that are entirely missing, and applies a median :class:`SimpleImputer`
-    before fitting the estimator. Summary statistics about these preprocessing steps
-    are returned in the :class:`TrainResult`.
+    Parameters
+    ----------
+    X:
+        Feature matrix to train on. The routine casts the payload to ``float`` and
+        sanitises non-finite entries prior to fitting.
+    y:
+        Target labels associated with ``X``. The labels must contain at least two
+        distinct classes.
+    model_type:
+        Name of the estimator to fit (``"logistic"`` or ``"gbm"``).
+    models_dir:
+        Directory where the fitted pipeline should be persisted.
+    threshold:
+        Probability threshold for translating predictions into class labels when
+        deriving simple metrics.
+
+    Returns
+    -------
+    TrainResult
+        Metadata about the persisted model, including preprocessing telemetry.
 
     Raises
     ------
@@ -50,6 +99,15 @@ def train_classifier(
         If the feature matrix is not two-dimensional, lacks usable rows or columns
         after cleaning, contains invalid target values, or the target labels collapse
         into a single class.
+
+    Example
+    -------
+    >>> import numpy as np
+    >>> from pathlib import Path
+    >>> X = np.random.rand(120, 4)
+    >>> y = (X[:, 0] > 0.5).astype(int)
+    >>> train_classifier(X, y, models_dir=Path("models"))
+    TrainResult(...)
     """
 
     if X.ndim != 2:
@@ -61,7 +119,9 @@ def train_classifier(
     original_feature_count = X.shape[1]
 
     if not np.isfinite(y).all():
-        raise ValueError("Target labels contain NaN or inf values; clean the labels before training")
+        raise ValueError(
+            "Target labels contain NaN or inf values; clean the labels before training"
+        )
 
     non_finite_mask = ~np.isfinite(X)
     imputed_cells = int(non_finite_mask.sum())
@@ -178,14 +238,35 @@ def calibrate_classifier(
     -------
     Path
         Filesystem path to the calibrated model artefact.
+
+    Raises
+    ------
+    ValueError
+        If the calibration payload is malformed, references invalid feature
+        indices, or lacks class diversity.
+
+    Example
+    -------
+    >>> from pathlib import Path
+    >>> import numpy as np
+    >>> model_path = Path("models/logistic_model.pkl")
+    >>> X_cal = np.random.rand(50, 4)
+    >>> y_cal = (X_cal[:, 0] > 0.5).astype(int)
+    >>> calibrate_classifier(model_path, (X_cal, y_cal))
+    PosixPath('models/logistic_model_calibrated.pkl')
     """
 
     X_cal, y_cal = calibration_data
     X_cal = np.asarray(X_cal, dtype=float)
     y_cal = np.asarray(y_cal).ravel()
 
+    if X_cal.ndim != 2:
+        raise ValueError("Calibration feature matrix must be 2-dimensional")
+
     if not np.isfinite(y_cal).all():
-        raise ValueError("Calibration labels contain NaN or inf values; clean the labels before calibrating")
+        raise ValueError(
+            "Calibration labels contain NaN or inf values; clean the labels before calibrating"
+        )
 
     if feature_mask is not None:
         indices = np.asarray(feature_mask, dtype=int)
@@ -197,6 +278,8 @@ def calibrate_classifier(
             raise ValueError("Feature mask cannot include negative column indices")
         if not np.all(np.diff(indices) >= 0):
             raise ValueError("Feature mask must be sorted in ascending order")
+        if np.unique(indices).size != indices.size:
+            raise ValueError("Feature mask contains duplicate column indices")
 
         max_index = int(indices.max())
         if original_feature_count is None or original_feature_count == X_cal.shape[1]:
@@ -231,6 +314,11 @@ def calibrate_classifier(
         raise ValueError("Calibration requires at least two target classes")
 
     pipeline = load_model(model_path)
+    expected_features = getattr(pipeline, "n_features_in_", None)
+    if expected_features is not None and X_cal.shape[1] != expected_features:
+        raise ValueError(
+            "Calibration feature matrix shape does not match the fitted model"
+        )
     calibrator = CalibratedClassifierCV(estimator=pipeline, method=method, cv="prefit")
     calibrator.fit(X_cal, y_cal)
     target_path = output_path or model_path.with_name(f"{model_path.stem}_calibrated.pkl")

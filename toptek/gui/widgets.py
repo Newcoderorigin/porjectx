@@ -447,6 +447,13 @@ class TradeTab(BaseTab):
         )
 
     def _show_risk(self) -> None:
+        """Refresh the Topstep guard summary and surface a contextual dialog.
+
+        The check recalculates a sample position size using the configured
+        Topstep profile, updates the guard label colouring, and displays either
+        an informational or warning dialog depending on whether the guard
+        remains in ``OK`` or moves into ``DEFENSIVE_MODE``.
+        """
         profile = risk.RiskProfile(
             max_position_size=self.configs["risk"].get("max_position_size", 1),
             max_daily_loss=self.configs["risk"].get("max_daily_loss", 1000),

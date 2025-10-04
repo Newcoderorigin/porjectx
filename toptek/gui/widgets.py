@@ -227,17 +227,83 @@ class TrainTab(BaseTab):
         feat_map = features.compute_features(df)
         X = np.column_stack(list(feat_map.values()))
         y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
-        result = model.train_classifier(X, y, model_type=self.model_type.get(), models_dir=self.paths.models)
+
+        unique_labels = np.unique(y)
+        if unique_labels.size < 2:
+            self.status.config(
+                text="Training aborted: target labels lack class diversity.", foreground="#b91c1c"
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "Training requires at least two classes after cleaning the dataset.\n"
+                    "Collect more data or adjust preprocessing to obtain both up and down samples."
+                ),
+            )
+            return
+
+        try:
+            result = model.train_classifier(
+                X, y, model_type=self.model_type.get(), models_dir=self.paths.models
+            )
+        except ValueError as exc:
+            self.status.config(
+                text="Training failed due to invalid feature matrix. Review warnings.",
+                foreground="#b91c1c",
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "The classifier could not be trained with the current dataset.\n\n"
+                    f"Details: {exc}"
+                ),
+            )
+            self.log_event(f"Model training failed: {exc}", level="error")
+            return
+        preprocessing = result.preprocessing or {}
+        prep_notes = []
+        if preprocessing.get("imputed_cells"):
+            prep_notes.append(
+                f"imputed {preprocessing['imputed_cells']} feature values"
+            )
+        if preprocessing.get("dropped_rows"):
+            prep_notes.append(
+                f"dropped {preprocessing['dropped_rows']} all-NaN rows"
+            )
+        if preprocessing.get("dropped_columns"):
+            prep_notes.append(
+                f"removed {preprocessing['dropped_columns']} empty columns"
+            )
+        if result.retained_columns is not None and result.original_feature_count is not None:
+            prep_notes.append(
+                f"retained {len(result.retained_columns)} of {result.original_feature_count} feature columns"
+            )
+        if prep_notes:
+            self.log_event(
+                "Preprocessing summary: " + ", ".join(prep_notes),
+                level="info",
+            )
         calibrate_report = "skipped"
+        calibration_detail: str | None = None
         calibration_failed = False
         if self.calibrate_var.get() and len(X) > 60:
             cal_size = max(60, int(len(X) * 0.2))
             X_cal = X[-cal_size:]
             y_cal = y[-cal_size:]
+            calibrate_kwargs = {}
+            if result.retained_columns is not None:
+                calibrate_kwargs["feature_mask"] = result.retained_columns
+                if result.original_feature_count is not None:
+                    calibrate_kwargs["original_feature_count"] = result.original_feature_count
             try:
-                calibrated_path = model.calibrate_classifier(result.model_path, (X_cal, y_cal))
+                calibrated_path = model.calibrate_classifier(
+                    result.model_path,
+                    (X_cal, y_cal),
+                    **calibrate_kwargs,
+                )
             except (ValueError, RuntimeError) as exc:
                 calibrate_report = f"calibration failed: {exc}"
+                calibration_detail = calibrate_report
                 calibration_failed = True
                 self.log_event(
                     f"Calibration failed for {result.model_path.name}: {exc}",
@@ -257,16 +323,22 @@ class TrainTab(BaseTab):
                 )
             else:
                 calibrate_report = f"calibrated → {calibrated_path.name}"
+                calibration_detail = calibrate_report
                 self.log_event(
                     f"Calibration completed for {result.model_path.name} → {calibrated_path.name}",
                     level="info",
                 )
+        calibrate_value = calibrate_report if not calibration_failed else "skipped"
         self.output.delete("1.0", tk.END)
         payload = {
             "model": self.model_type.get(),
             "metrics": result.metrics,
             "threshold": result.threshold,
-            "calibration": calibrate_report,
+            "preprocessing": preprocessing,
+            "retained_columns": list(result.retained_columns) if result.retained_columns is not None else None,
+            "original_feature_count": result.original_feature_count,
+            "calibration": calibrate_value,
+            "calibration_detail": calibration_detail,
         }
         self.output.insert(tk.END, json_dumps(payload))
         self.update_section("training", payload)
@@ -350,6 +422,7 @@ class TradeTab(BaseTab):
 
     def __init__(self, master: ttk.Notebook, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) -> None:
         self.guard_status = tk.StringVar(value="Topstep Guard: pending review")
+        self.guard_label: ttk.Label | None = None
         super().__init__(master, configs, paths)
         self._build()
 
@@ -366,7 +439,8 @@ class TradeTab(BaseTab):
             justify=tk.LEFT,
         ).pack(anchor=tk.W)
 
-        ttk.Label(intro, textvariable=self.guard_status, foreground="#1d4ed8").pack(anchor=tk.W, pady=(8, 0))
+        self.guard_label = ttk.Label(intro, textvariable=self.guard_status, foreground="#1d4ed8")
+        self.guard_label.pack(anchor=tk.W, pady=(8, 0))
 
         ttk.Button(self, text="Refresh Topstep guard", command=self._show_risk).pack(pady=(6, 0))
         self.output = tk.Text(self, height=12)
@@ -378,6 +452,13 @@ class TradeTab(BaseTab):
         )
 
     def _show_risk(self) -> None:
+        """Refresh the Topstep guard summary and surface a contextual dialog.
+
+        The check recalculates a sample position size using the configured
+        Topstep profile, updates the guard label colouring, and displays either
+        an informational or warning dialog depending on whether the guard
+        remains in ``OK`` or moves into ``DEFENSIVE_MODE``.
+        """
         profile = risk.RiskProfile(
             max_position_size=self.configs["risk"].get("max_position_size", 1),
             max_daily_loss=self.configs["risk"].get("max_daily_loss", 1000),
@@ -389,6 +470,9 @@ class TradeTab(BaseTab):
         sample_size = risk.position_size(50000, profile, atr=3.5, tick_value=12.5, risk_per_trade=0.01)
         guard = "OK" if sample_size > 0 else "DEFENSIVE_MODE"
         self.guard_status.set(f"Topstep Guard: {guard}")
+        if self.guard_label is not None:
+            colour = "#15803d" if guard == "OK" else "#b91c1c"
+            self.guard_label.configure(foreground=colour)
         payload = {
             "profile": profile.__dict__,
             "suggested_contracts": sample_size,
@@ -397,10 +481,27 @@ class TradeTab(BaseTab):
                 "losses": profile.cooldown_losses,
                 "minutes": profile.cooldown_minutes,
             },
+            "topstep_guard": guard,
             "next_steps": "If guard shows DEFENSIVE_MODE, stand down and review journal before trading.",
         }
         self.output.delete("1.0", tk.END)
         self.output.insert(tk.END, json_dumps(payload))
+
+        guard_message = (
+            "Topstep guard assessment completed.\n\n"
+            f"Suggested contracts: {sample_size}.\n"
+            f"Daily loss cap: ${profile.max_daily_loss}.\n"
+            "Cooldown policy: "
+            f"{profile.cooldown_losses} losses → wait {profile.cooldown_minutes} minutes."
+        )
+
+        if guard == "OK":
+            messagebox.showinfo("Topstep Guard", guard_message)
+        else:
+            warning_message = (
+                f"{guard_message}\n\nDEFENSIVE_MODE active. Stand down and review your journal before trading."
+            )
+            messagebox.showwarning("Topstep Guard", warning_message)
 
 
 __all__ = [

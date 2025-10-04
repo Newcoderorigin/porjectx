@@ -26,6 +26,7 @@ python main.py
 python main.py --cli train --symbol ESZ5 --timeframe 5m --lookback 90d
 python main.py --cli backtest --symbol ESZ5 --timeframe 5m --start 2025-01-01
 python main.py --cli paper --symbol ESZ5 --timeframe 5m
+python -m toptek.replay.sim data/sessions/es_sample.parquet --speed 2.0
 ```
 
 ## Project structure
@@ -41,6 +42,8 @@ toptek/
     app.yml
     risk.yml
     features.yml
+  replay/
+    sim.py
   core/
     gateway.py
     symbols.py
@@ -69,10 +72,11 @@ Configuration defaults live under the `config/` folder and are merged with value
 
 ## Development notes
 
-- Source code is fully typed and documented with docstrings.
-- HTTP interactions with ProjectX Gateway rely on `httpx` with retry-once semantics for authentication failures.
-- Feature engineering uses `numpy` and `ta` indicators; additional features can be added to `core/features.py`.
-- Models are persisted locally in the `models/` folder.
+  - Source code is fully typed and documented with docstrings.
+  - HTTP interactions with ProjectX Gateway rely on `httpx` with retry-once semantics for authentication failures.
+  - Feature engineering uses `numpy` and `ta` indicators; additional features can be added to `core/features.py`.
+  - Models are persisted locally in the `models/` folder.
+  - The replay simulator (`toptek/replay/sim.py`) streams recorded bars into the GUI Replay tab and a standalone CLI (`python -m toptek.replay.sim`).
 
 ## Safety
 
@@ -89,4 +93,16 @@ pip install -r requirements-streaming.txt
 ```
 
 Streaming helpers are stubbed in `core/live.py` and disabled unless `signalrcore` is installed.
+
+## Replay simulator
+
+Use the Replay tab inside the GUI to connect a CSV/Parquet dataset to the live chart. Playback controls expose start, pause,
+resume, and seek, while a speed selector lets you accelerate or slow the stream. The same engine powers a CLI entry point:
+
+```bash
+python -m toptek.replay.sim path/to/session.parquet --speed 4 --format parquet
+```
+
+The CLI prints each bar as JSON and supports seeking via index or timestamp (`--seek 2024-01-15T14:30:00`). The GUI stores the
+most recent playback state in the in-memory config so mission control can resume from the same dataset.
 

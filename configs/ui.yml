@@ -29,3 +29,9 @@ status:
     pending: "Topstep Guard: pending review"
     intro: "Manual execution only. Awaiting guard refresh..."
     defensive_warning: "DEFENSIVE_MODE active. Stand down and review your journal before trading."
+  replay:
+    idle: "Load a dataset to begin playback."
+    buffering: "Preparing replay dataset..."
+    playing: "Streaming simulator feed."
+    paused: "Replay paused."
+    complete: "Reached end of recording."

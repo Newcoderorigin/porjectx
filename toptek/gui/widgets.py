@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import math
 import os
+from collections import deque
+from datetime import datetime
+from pathlib import Path
 import tkinter as tk
-from tkinter import messagebox, ttk
+from queue import Empty, Queue
+from tkinter import filedialog, messagebox, ttk
 from typing import Any, Dict, TypeVar, cast
 
 import numpy as np
 
 from core import backtest, features, model, risk, utils
-from toptek.features import build_features
 from core.data import sample_dataframe
 from core.utils import json_dumps
+from toptek.features import build_features
+from toptek.replay import ReplayBar, ReplaySimulator
 
 from . import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
 
@@ -67,6 +73,125 @@ class BaseTab(ttk.Frame):
             if data is None:
                 return default
         return cast(T, data)
+
+
+class LiveChart(ttk.Frame):
+    """Lightweight canvas-based price chart for replay sessions."""
+
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        max_points: int,
+        decimals: int,
+    ) -> None:
+        super().__init__(master, style="ChartContainer.TFrame")
+        self._max_points = max(10, int(max_points))
+        self._decimals = max(0, int(decimals))
+        self._values: deque[float] = deque(maxlen=self._max_points)
+        self._timestamps: deque[datetime] = deque(maxlen=self._max_points)
+        self._line_id: int | None = None
+        self._canvas = tk.Canvas(
+            self,
+            background=DARK_PALETTE["surface_alt"],
+            highlightthickness=0,
+            bd=0,
+        )
+        self._canvas.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
+        self._canvas.bind("<Configure>", lambda _: self._render())
+
+    def clear(self) -> None:
+        self._values.clear()
+        self._timestamps.clear()
+        if self._line_id is not None:
+            self._canvas.delete(self._line_id)
+            self._line_id = None
+        self._canvas.delete("axes")
+
+    def push(self, bar: ReplayBar) -> None:
+        price = self._extract_price(bar)
+        if price is None:
+            return
+        self._values.append(price)
+        self._timestamps.append(bar.timestamp)
+        self._render()
+
+    def last_price(self) -> float | None:
+        return self._values[-1] if self._values else None
+
+    def _extract_price(self, bar: ReplayBar) -> float | None:
+        for key in ("close", "settle", "last", "price", "mid"):
+            value = bar.data.get(key)
+            if value is None:
+                continue
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _render(self) -> None:
+        if len(self._values) < 2:
+            if self._line_id is not None:
+                self._canvas.delete(self._line_id)
+                self._line_id = None
+            self._canvas.delete("axes")
+            return
+        width = max(self._canvas.winfo_width(), 32)
+        height = max(self._canvas.winfo_height(), 32)
+        values = list(self._values)
+        low = min(values)
+        high = max(values)
+        if math.isclose(low, high):
+            buffer = abs(low) * 0.001 or 1.0
+            low -= buffer
+            high += buffer
+        padding = 14
+        usable_height = max(height - padding * 2, 1)
+        usable_width = max(width - padding * 2, 1)
+        step = usable_width / (len(values) - 1)
+        coords: list[float] = []
+        for idx, value in enumerate(values):
+            x = padding + idx * step
+            ratio = (value - low) / (high - low)
+            y = height - padding - ratio * usable_height
+            coords.extend((x, y))
+        if self._line_id is None:
+            self._line_id = self._canvas.create_line(
+                *coords,
+                fill=DARK_PALETTE["accent"],
+                width=2,
+                tags=("series",),
+            )
+        else:
+            self._canvas.coords(self._line_id, *coords)
+        self._canvas.delete("axes")
+        baseline = DARK_PALETTE["border_muted"]
+        self._canvas.create_line(
+            padding,
+            height - padding,
+            width - padding,
+            height - padding,
+            fill=baseline,
+            width=1,
+            tags=("axes",),
+        )
+        self._canvas.create_text(
+            padding,
+            padding,
+            anchor=tk.NW,
+            fill=DARK_PALETTE["text_muted"],
+            text=f"{values[0]:.{self._decimals}f}",
+            tags=("axes",),
+        )
+        self._canvas.create_text(
+            width - padding,
+            padding,
+            anchor=tk.NE,
+            fill=DARK_PALETTE["text_muted"],
+            text=f"{values[-1]:.{self._decimals}f}",
+            tags=("axes",),
+        )
 
 
 class DashboardTab(BaseTab):
@@ -824,6 +949,383 @@ class BacktestTab(BaseTab):
         self.update_section("backtest", payload)
 
 
+class ReplayTab(BaseTab):
+    """Replay tab wiring the simulator feed into the live chart."""
+
+    def __init__(
+        self,
+        master: ttk.Notebook,
+        configs: Dict[str, Dict[str, object]],
+        paths: utils.AppPaths,
+    ) -> None:
+        self.file_var = tk.StringVar()
+        self.format_var = tk.StringVar(value="auto")
+        self.speed_var = tk.StringVar(value="1.0")
+        self.seek_var = tk.DoubleVar(value=0.0)
+        self.status_var = tk.StringVar()
+        self._queue: Queue[ReplayBar] = Queue()
+        self._poll_job: str | None = None
+        self._simulator: ReplaySimulator | None = None
+        self._processed = 0
+        self._total = 0
+        self._suspend_seek = False
+        self._user_scrubbing = False
+        self._poll_interval = 100
+        self._chart: LiveChart | None = None
+        self._price_decimals = 2
+        super().__init__(master, configs, paths)
+        self._price_decimals = int(
+            self.ui_setting("chart", "price_decimals", default=2)
+        )
+        default_status = self.ui_setting(
+            "status",
+            "replay",
+            "idle",
+            default="Load a dataset to begin playback.",
+        )
+        self.status_var.set(default_status)
+        default_dataset = (self.paths.cache / "replay.parquet").resolve()
+        self.file_var.set(str(default_dataset))
+        self._poll_interval = max(
+            16, int(1000 / int(self.ui_setting("chart", "fps", default=12)))
+        )
+        self._build()
+
+    def destroy(self) -> None:
+        self._cancel_poll()
+        self._stop_simulator()
+        super().destroy()
+
+    def _build(self) -> None:
+        controls = ttk.LabelFrame(
+            self,
+            text="Step 5 · Replay",
+            style="Section.TLabelframe",
+        )
+        controls.pack(fill=tk.X, padx=10, pady=(12, 6))
+
+        ttk.Label(controls, text="Dataset", style="Surface.TLabel").grid(
+            row=0, column=0, sticky=tk.W
+        )
+        path_entry = ttk.Entry(
+            controls,
+            textvariable=self.file_var,
+            width=46,
+            style="Input.TEntry",
+        )
+        path_entry.grid(row=0, column=1, columnspan=3, sticky=tk.EW, padx=(8, 8))
+        ttk.Button(
+            controls,
+            text="Browse",
+            style="Neutral.TButton",
+            command=self._browse_dataset,
+        ).grid(row=0, column=4, padx=(0, 0))
+
+        ttk.Label(controls, text="Format", style="Surface.TLabel").grid(
+            row=1, column=0, sticky=tk.W, pady=(8, 0)
+        )
+        format_combo = ttk.Combobox(
+            controls,
+            textvariable=self.format_var,
+            values=("auto", "csv", "parquet"),
+            state="readonly",
+            width=12,
+            style="Input.TCombobox",
+        )
+        format_combo.grid(row=1, column=1, sticky=tk.W, padx=(8, 12), pady=(8, 0))
+
+        ttk.Label(controls, text="Speed (×)", style="Surface.TLabel").grid(
+            row=1, column=2, sticky=tk.W, pady=(8, 0)
+        )
+        speed_combo = ttk.Combobox(
+            controls,
+            textvariable=self.speed_var,
+            values=("0.25", "0.5", "1.0", "1.5", "2.0", "3.0", "4.0"),
+            width=10,
+            style="Input.TCombobox",
+        )
+        speed_combo.grid(row=1, column=3, sticky=tk.W, pady=(8, 0))
+        speed_combo.bind("<<ComboboxSelected>>", self._set_speed)
+        speed_combo.bind("<FocusOut>", self._set_speed)
+        speed_combo.bind("<Return>", self._set_speed)
+
+        ttk.Button(
+            controls, text="Start", style="Accent.TButton", command=self._start_replay
+        ).grid(row=1, column=4, padx=(12, 0), pady=(8, 0))
+
+        ttk.Button(
+            controls,
+            text="Pause",
+            style="Neutral.TButton",
+            command=self._pause_replay,
+        ).grid(row=2, column=1, sticky=tk.W, pady=(8, 0))
+        ttk.Button(
+            controls,
+            text="Resume",
+            style="Neutral.TButton",
+            command=self._resume_replay,
+        ).grid(row=2, column=2, sticky=tk.W, pady=(8, 0))
+        ttk.Button(
+            controls,
+            text="Stop",
+            style="Neutral.TButton",
+            command=self._stop_replay,
+        ).grid(row=2, column=3, sticky=tk.W, pady=(8, 0))
+
+        ttk.Label(controls, text="Position", style="Surface.TLabel").grid(
+            row=3, column=0, sticky=tk.W, pady=(10, 0)
+        )
+        self.seek_scale = ttk.Scale(
+            controls,
+            from_=0,
+            to=100,
+            variable=self.seek_var,
+        )
+        self.seek_scale.grid(
+            row=3, column=1, columnspan=4, sticky=tk.EW, padx=(8, 0), pady=(10, 0)
+        )
+        self.seek_scale.bind("<ButtonPress-1>", self._on_seek_start)
+        self.seek_scale.bind("<ButtonRelease-1>", self._on_seek_release)
+
+        controls.columnconfigure(1, weight=1)
+        controls.columnconfigure(2, weight=1)
+        controls.columnconfigure(3, weight=1)
+
+        chart_container = ttk.Frame(self, style="DashboardBackground.TFrame")
+        chart_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=(6, 6))
+        self._chart = LiveChart(
+            chart_container,
+            max_points=int(self.ui_setting("chart", "max_points", default=180)),
+            decimals=self._price_decimals,
+        )
+        self._chart.pack(fill=tk.BOTH, expand=True)
+
+        self.output = tk.Text(self, height=10)
+        self.style_text_widget(self.output)
+        self.output.pack(fill=tk.BOTH, expand=False, padx=10, pady=(0, 4))
+        self.output.insert(
+            tk.END,
+            "Select a dataset and click Start to stream the recording through the chart.",
+        )
+
+        self.status = ttk.Label(
+            self,
+            textvariable=self.status_var,
+            style="StatusInfo.TLabel",
+            anchor=tk.W,
+        )
+        self.status.pack(fill=tk.X, padx=12, pady=(0, 12))
+
+    def _browse_dataset(self) -> None:
+        current = Path(self.file_var.get()).expanduser()
+        initial_dir = current.parent if current.exists() else self.paths.root
+        selected = filedialog.askopenfilename(
+            parent=self,
+            title="Select replay dataset",
+            initialdir=initial_dir,
+            filetypes=(
+                ("Parquet", "*.parquet *.pq"),
+                ("CSV", "*.csv *.txt"),
+                ("All files", "*.*"),
+            ),
+        )
+        if selected:
+            self.file_var.set(selected)
+
+    def _start_replay(self) -> None:
+        path = Path(self.file_var.get()).expanduser()
+        fmt = (self.format_var.get() or "auto").strip().lower()
+        speed = self._current_speed()
+        if not path.exists():
+            messagebox.showerror("Replay", f"Dataset not found: {path}")
+            return
+        self._stop_simulator()
+        try:
+            simulator = ReplaySimulator.from_path(path, fmt=fmt, speed=speed)
+        except Exception as exc:
+            self.logger.error("Replay start failed", exc_info=exc)
+            messagebox.showerror("Replay", f"Unable to start replay: {exc}")
+            return
+        self._simulator = simulator
+        self._queue = Queue()
+        simulator.clear_listeners()
+        simulator.add_listener(self._on_bar)
+        self._processed = 0
+        self._total = simulator.total_bars
+        self._update_seek_slider(0.0)
+        if self._chart:
+            self._chart.clear()
+        self.output.delete("1.0", tk.END)
+        buffering = self.ui_setting(
+            "status", "replay", "buffering", default="Preparing replay dataset..."
+        )
+        self.status_var.set(buffering)
+        self.update_section(
+            "replay",
+            {
+                "dataset": str(path),
+                "format": fmt,
+                "speed": speed,
+                "total_bars": self._total,
+            },
+        )
+        simulator.set_speed(speed)
+        simulator.start()
+        self._schedule_poll()
+
+    def _pause_replay(self) -> None:
+        if not self._simulator:
+            return
+        self._simulator.pause()
+        paused = self.ui_setting("status", "replay", "paused", default="Replay paused.")
+        self.status_var.set(paused)
+
+    def _resume_replay(self) -> None:
+        if not self._simulator:
+            self._start_replay()
+            return
+        self._simulator.resume()
+        if not self._simulator.running:
+            self._simulator.start()
+        playing = self.ui_setting(
+            "status", "replay", "playing", default="Streaming simulator feed."
+        )
+        self.status_var.set(playing)
+        self._schedule_poll()
+
+    def _stop_replay(self) -> None:
+        self._stop_simulator()
+
+    def _stop_simulator(self) -> None:
+        simulator = self._simulator
+        if simulator is not None:
+            simulator.clear_listeners()
+            simulator.stop()
+        self._simulator = None
+        self._queue = Queue()
+        self._cancel_poll()
+        self._processed = 0
+        self._total = 0
+        if self._chart:
+            self._chart.clear()
+        idle = self.ui_setting(
+            "status", "replay", "idle", default="Load a dataset to begin playback."
+        )
+        self.status_var.set(idle)
+
+    def _on_bar(self, bar: ReplayBar) -> None:
+        self._queue.put(bar)
+
+    def _schedule_poll(self) -> None:
+        if self._poll_job is None:
+            self._poll_job = self.after(self._poll_interval, self._poll_queue)
+
+    def _cancel_poll(self) -> None:
+        if self._poll_job is not None:
+            self.after_cancel(self._poll_job)
+            self._poll_job = None
+
+    def _poll_queue(self) -> None:
+        self._poll_job = None
+        updated = False
+        while True:
+            try:
+                bar = self._queue.get_nowait()
+            except Empty:
+                break
+            self._process_bar(bar)
+            updated = True
+        simulator = self._simulator
+        if simulator and (simulator.running or not self._queue.empty()):
+            self._schedule_poll()
+        elif updated and self._total:
+            complete = self.ui_setting(
+                "status",
+                "replay",
+                "complete",
+                default="Reached end of recording.",
+            )
+            self.status_var.set(complete)
+
+    def _process_bar(self, bar: ReplayBar) -> None:
+        self._processed = max(self._processed, bar.index + 1)
+        if self._chart:
+            self._chart.push(bar)
+        price = self._chart.last_price() if self._chart else None
+        playing = self.ui_setting(
+            "status", "replay", "playing", default="Streaming simulator feed."
+        )
+        if price is not None:
+            summary = (
+                f"{bar.timestamp:%Y-%m-%d %H:%M:%S} · {playing}"
+                f" Close {price:.{self._price_decimals}f}"
+            )
+        else:
+            summary = f"{bar.timestamp:%Y-%m-%d %H:%M:%S} · {playing}"
+        self.status_var.set(summary)
+        ratio = self._processed / self._total if self._total else 0.0
+        self._update_seek_slider(ratio * 100.0)
+        self.output.delete("1.0", tk.END)
+        self.output.insert(tk.END, json_dumps(bar.to_dict()))
+        self.update_section(
+            "replay",
+            {
+                "last_timestamp": bar.timestamp.isoformat(),
+                "last_index": bar.index,
+                "progress": self._processed,
+            },
+        )
+
+    def _set_speed(self, *_: object) -> None:
+        speed = self._current_speed()
+        if self._simulator:
+            try:
+                self._simulator.set_speed(speed)
+            except ValueError:
+                return
+        self.update_section("replay", {"speed": speed})
+
+    def _current_speed(self) -> float:
+        try:
+            value = float(self.speed_var.get())
+        except (TypeError, ValueError):
+            value = 1.0
+        return max(0.1, value)
+
+    def _on_seek_start(self, _: tk.Event) -> None:
+        self._user_scrubbing = True
+
+    def _on_seek_release(self, _: tk.Event) -> None:
+        self._user_scrubbing = False
+        self._apply_seek()
+
+    def _apply_seek(self) -> None:
+        if self._suspend_seek or not self._simulator or not self._total:
+            return
+        target = max(0.0, min(100.0, self.seek_var.get())) / 100.0
+        index = int(target * (self._total - 1))
+        try:
+            self._simulator.seek(index)
+        except (TypeError, ValueError) as exc:
+            self.logger.error("Replay seek failed", exc_info=exc)
+            return
+        self._queue = Queue()
+        self._processed = index
+        buffering = self.ui_setting(
+            "status", "replay", "buffering", default="Preparing replay dataset..."
+        )
+        self.status_var.set(buffering)
+        if self._chart:
+            self._chart.clear()
+
+    def _update_seek_slider(self, percent: float) -> None:
+        if self._user_scrubbing:
+            return
+        self._suspend_seek = True
+        self.seek_var.set(max(0.0, min(100.0, percent)))
+        self._suspend_seek = False
+
+
 class TradeTab(BaseTab):
     """Trade tab placeholder for polling order/position data."""
 
@@ -844,7 +1346,7 @@ class TradeTab(BaseTab):
     def _build(self) -> None:
         intro = ttk.LabelFrame(
             self,
-            text="Step 5 · Execution guard",
+            text="Step 6 · Execution guard",
             style="Section.TLabelframe",
         )
         intro.pack(fill=tk.X, padx=10, pady=(12, 6))
@@ -952,5 +1454,6 @@ __all__ = [
     "ResearchTab",
     "TrainTab",
     "BacktestTab",
+    "ReplayTab",
     "TradeTab",
 ]

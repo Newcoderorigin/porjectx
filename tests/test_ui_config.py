@@ -15,6 +15,7 @@ def test_load_ui_config_defaults(tmp_path: Path) -> None:
     assert cfg.shell.research_bars == 240
     assert cfg.chart.fps == 12
     assert cfg.status.login.idle == "Awaiting verification"
+    assert cfg.status.replay.idle == "Load a dataset to begin playback."
     assert cfg.appearance.theme == "dark"
 
 

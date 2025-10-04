@@ -56,9 +56,13 @@ class ToptekApp(ttk.Notebook):
                 widgets.BacktestTab,
                 "Step 4 · Validate expectancy and drawdown resilience.",
             ),
+            "Replay": (
+                widgets.ReplayTab,
+                "Step 5 · Rehearse the playbook against recorded sessions before trading live.",
+            ),
             "Trade": (
                 widgets.TradeTab,
-                "Step 5 · Check Topstep guardrails and plan manual execution.",
+                "Step 6 · Check Topstep guardrails and plan manual execution.",
             ),
         }
         for name, (cls, guidance) in tabs.items():

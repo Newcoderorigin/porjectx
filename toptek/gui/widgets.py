@@ -263,49 +263,73 @@ class TrainTab(BaseTab):
         X = np.column_stack(list(feat_map.values()))
         y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
         result = model.train_classifier(X, y, model_type=self.model_type.get(), models_dir=self.paths.models)
-        calibrate_report = "skipped"
         calibration_failed = False
-        if self.calibrate_var.get() and len(X) > 60:
-            cal_size = max(60, int(len(X) * 0.2))
-            X_cal = X[-cal_size:]
-            y_cal = y[-cal_size:]
-            try:
-                calibrated_path = model.calibrate_classifier(result.model_path, (X_cal, y_cal))
-            except (ValueError, RuntimeError) as exc:
-                calibrate_report = f"skipped calibration · {type(exc).__name__}: {exc}".strip()
-                calibration_failed = True
-                self.log_event(
-                    f"Calibration failed for {result.model_path.name}: {type(exc).__name__}: {exc}",
-                    level="warning",
-                    exc=exc,
-                )
-                self.set_status(
-                    self.status,
-                    "Calibration skipped due to data quality. Review logs for details.",
-                    tone="error",
-                )
-                warning_body = (
-                    "Probability calibration failed with the current sample. "
-                    "The base model artefact is saved without calibration.\n\n"
-                    f"Details: {type(exc).__name__}: {exc}"
-                )
-                if warning_body != self._last_calibration_warning:
-                    messagebox.showwarning("Calibration warning", warning_body)
-                    self._last_calibration_warning = warning_body
+        calibrated_model: str | None = None
+        if self.calibrate_var.get():
+            calibration_status = "pending"
+            calibrate_report = "calibration pending"
+            if len(X) > 60:
+                cal_size = max(60, int(len(X) * 0.2))
+                X_cal = X[-cal_size:]
+                y_cal = y[-cal_size:]
+                try:
+                    calibrated_path = model.calibrate_classifier(result.model_path, (X_cal, y_cal))
+                except (ValueError, RuntimeError, OSError) as exc:
+                    calibrate_report = f"skipped calibration · {type(exc).__name__}: {exc}".strip()
+                    calibration_status = "skipped"
+                    calibration_failed = True
+                    self.log_event(
+                        f"Calibration failed for {result.model_path.name}: {type(exc).__name__}: {exc}",
+                        level="warning",
+                        exc=exc,
+                    )
+                    self.set_status(
+                        self.status,
+                        "Calibration skipped due to data quality. Review logs for details.",
+                        tone="error",
+                    )
+                    warning_body = (
+                        "Probability calibration failed with the current sample. "
+                        "The base model artefact is saved without calibration.\n\n"
+                        f"Details: {type(exc).__name__}: {exc}"
+                    )
+                    if warning_body != self._last_calibration_warning:
+                        messagebox.showwarning("Calibration warning", warning_body)
+                        self._last_calibration_warning = warning_body
+                else:
+                    calibrated_model = calibrated_path.name
+                    calibrate_report = f"calibrated → {calibrated_model}"
+                    calibration_status = "success"
+                    self._last_calibration_warning = None
+                    self.log_event(
+                        f"Calibration completed for {result.model_path.name} → {calibrated_model}",
+                        level="info",
+                    )
             else:
-                calibrate_report = f"calibrated → {calibrated_path.name}"
+                calibration_status = "skipped"
+                calibrate_report = "skipped calibration · insufficient holdout samples"
                 self._last_calibration_warning = None
                 self.log_event(
-                    f"Calibration completed for {result.model_path.name} → {calibrated_path.name}",
+                    f"Calibration skipped for {result.model_path.name}: insufficient holdout samples ({len(X)})",
                     level="info",
                 )
+        else:
+            calibration_status = "skipped"
+            calibrate_report = "skipped calibration · user preference"
+            self._last_calibration_warning = None
+            self.log_event(
+                f"Calibration not requested for {result.model_path.name}",
+                level="info",
+            )
         self.output.delete("1.0", tk.END)
         payload = {
             "model": self.model_type.get(),
             "metrics": result.metrics,
             "threshold": result.threshold,
+            "model_path": result.model_path.name,
             "calibration": calibrate_report,
-            "calibration_status": "skipped" if calibration_failed else "success",
+            "calibration_status": "skipped" if calibration_failed else calibration_status,
+            "calibrated_model": calibrated_model,
         }
         self.output.insert(tk.END, json_dumps(payload))
         self.update_section("training", payload)

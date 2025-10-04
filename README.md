@@ -67,3 +67,18 @@ CLI flags:
 These controls keep the default Topstep demo intact while making it easy to
 point the toolkit at alternative markets or stress-test higher frequency charts
 without editing source files.
+
+## Risk guard engine
+
+The `toptek/risk` package now ships a policy-driven guard engine that powers
+the trade tab badge and the `Ctrl+P` panic circuit. Run
+
+```bash
+python -m toptek.risk.engine --dryrun
+```
+
+to inspect the aggregated guard report and rule breakdown without launching the
+GUI. Install [`PyYAML`](https://pyyaml.org/) if the command reports a missing
+dependency. The same report is serialised back into the `configs["trade"]`
+dictionary whenever the guard is refreshed, allowing downstream automation to
+respond when the status shifts between `OK` and `DEFENSIVE_MODE`.

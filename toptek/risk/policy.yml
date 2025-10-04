@@ -1,0 +1,33 @@
+name: Topstep Guard Reference
+version: 2024.09
+defaults:
+  account_balance: 50000
+  atr: 3.5
+  tick_value: 12.5
+  risk_per_trade: 0.01
+profile:
+  max_position_size: 3
+  max_daily_loss: 1500
+  restricted_hours: []
+  atr_multiplier_stop: 2.0
+  cooldown_losses: 2
+  cooldown_minutes: 30
+rules:
+  - id: position-sizing
+    title: Position sizing margin
+    type: position_size
+    min_contracts: 1
+    ok: "Sizing margin supports {suggested} contracts (policy requires ≥{required})."
+    defensive: "Position sizing collapsed to {suggested} contracts; guard requires ≥{required}."
+  - id: loss-cap
+    title: Daily loss cap
+    type: max_daily_loss
+    max_loss: 3000
+    ok: "Daily loss cap ${configured:.0f} sits within the guard ceiling ${policy:.0f}."
+    defensive: "Daily loss cap ${configured:.0f} breaches the guard ceiling ${policy:.0f}."
+  - id: cooldown-discipline
+    title: Cooldown discipline
+    type: cooldown
+    max_losses: 3
+    ok: "Cooldown triggers after {configured} losses (policy ≤{policy})."
+    defensive: "Cooldown waits {configured} losses which is above the policy ceiling ≤{policy}."

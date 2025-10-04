@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 if "pandas" not in sys.modules:
+
     def _unsupported(*_: object, **__: object) -> None:
         raise RuntimeError("pandas stub used unexpectedly")
 
@@ -33,8 +34,8 @@ if "yaml" not in sys.modules:
     yaml_stub = types.SimpleNamespace(safe_load=lambda *args, **kwargs: {})
     sys.modules["yaml"] = yaml_stub  # type: ignore[assignment]
 
-from toptek.replay import sim
-from toptek.replay.sim import ReplayBar
+from toptek.replay import sim  # noqa: E402
+from toptek.replay.sim import ReplayBar  # noqa: E402
 
 
 class DummySimulator:

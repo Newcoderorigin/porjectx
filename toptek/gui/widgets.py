@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import os
 from collections import deque
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import tkinter as tk
 from queue import Empty, Queue
@@ -14,10 +14,11 @@ from typing import Any, Dict, TypeVar, cast
 
 import numpy as np
 
-from core import backtest, features, model, risk, utils
+from core import backtest, features, model, utils
 from core.data import sample_dataframe
 from core.utils import json_dumps
 from toptek.features import build_features
+from toptek.risk import GuardReport, RiskEngine
 from toptek.replay import ReplayBar, ReplaySimulator
 
 from . import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
@@ -1327,7 +1328,9 @@ class ReplayTab(BaseTab):
 
 
 class TradeTab(BaseTab):
-    """Trade tab placeholder for polling order/position data."""
+    """Trade tab that wires the guard engine into the execution workflow."""
+
+    _PANIC_BINDING = "<Control-p>"
 
     def __init__(
         self,
@@ -1336,12 +1339,40 @@ class TradeTab(BaseTab):
         paths: utils.AppPaths,
     ) -> None:
         super().__init__(master, configs, paths)
+        self.configs.setdefault("trade", {})
         guard_pending = self.ui_setting(
             "status", "guard", "pending", default="Topstep Guard: pending review"
         )
-        self.guard_status = tk.StringVar(master=self, value=guard_pending)
+        initial_mode = str(self.configs["trade"].get("mode", "PAPER")).upper()
+        self._guard_pending_copy = guard_pending
+        self.trading_mode = tk.StringVar(master=self, value=initial_mode)
+        self.guard_status = tk.StringVar(
+            master=self,
+            value=self._compose_guard_caption(guard_pending, initial_mode),
+        )
         self.guard_label: ttk.Label | None = None
+        self._risk_engine = RiskEngine.from_policy()
+        self._guard_report: GuardReport | None = None
+        self._panic_bound = False
+        self.update_section("trade", {"mode": initial_mode})
+        self._bind_panic()
         self._build()
+
+    def destroy(self) -> None:  # pragma: no cover - Tk handles lifecycle in UI
+        self._unbind_panic()
+        super().destroy()
+
+    def _bind_panic(self) -> None:
+        if self._panic_bound:
+            return
+        self.bind_all(self._PANIC_BINDING, self._handle_panic, add="+")
+        self._panic_bound = True
+
+    def _unbind_panic(self) -> None:
+        if not self._panic_bound:
+            return
+        self.unbind_all(self._PANIC_BINDING)
+        self._panic_bound = False
 
     def _build(self) -> None:
         intro = ttk.LabelFrame(
@@ -1361,17 +1392,56 @@ class TradeTab(BaseTab):
             style="Surface.TLabel",
         ).pack(anchor=tk.W)
 
-        self.guard_label = ttk.Label(
-            intro, textvariable=self.guard_status, style="SurfaceStatus.TLabel"
-        )
-        self.guard_label.pack(anchor=tk.W, pady=(8, 0))
+        status_row = ttk.Frame(intro, style="DashboardBackground.TFrame")
+        status_row.pack(fill=tk.X, pady=(10, 6))
 
+        self.guard_label = ttk.Label(
+            status_row,
+            textvariable=self.guard_status,
+            style="GuardBadge.TLabel",
+        )
+        self.guard_label.pack(anchor=tk.W, side=tk.LEFT, padx=(0, 12))
+
+        mode_frame = ttk.Frame(status_row, style="DashboardBackground.TFrame")
+        mode_frame.pack(side=tk.LEFT)
+        ttk.Label(
+            mode_frame,
+            text="Trading mode",
+            style="Surface.TLabel",
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W)
+
+        ttk.Radiobutton(
+            mode_frame,
+            text="Paper (simulated)",
+            value="PAPER",
+            variable=self.trading_mode,
+            command=lambda: self._set_mode("PAPER"),
+            style="Input.TRadiobutton",
+        ).grid(row=1, column=0, padx=(0, 8), sticky=tk.W)
+        ttk.Radiobutton(
+            mode_frame,
+            text="Live (connected)",
+            value="LIVE",
+            variable=self.trading_mode,
+            command=lambda: self._set_mode("LIVE"),
+            style="Input.TRadiobutton",
+        ).grid(row=1, column=1, sticky=tk.W)
+
+        controls = ttk.Frame(intro, style="DashboardBackground.TFrame")
+        controls.pack(fill=tk.X, pady=(0, 6))
         ttk.Button(
-            self,
+            controls,
             text="Refresh Topstep guard",
             style="Accent.TButton",
-            command=self._show_risk,
-        ).pack(pady=(6, 0))
+            command=lambda: self._refresh_guard(show_modal=True),
+        ).pack(side=tk.LEFT)
+        ttk.Button(
+            controls,
+            text="Panic to paper (Ctrl+P)",
+            style="Neutral.TButton",
+            command=self._panic_to_paper,
+        ).pack(side=tk.LEFT, padx=(8, 0))
+
         self.output = tk.Text(self, height=12)
         self.style_text_widget(self.output)
         self.output.pack(fill=tk.BOTH, expand=True, padx=10, pady=(6, 12))
@@ -1383,69 +1453,119 @@ class TradeTab(BaseTab):
         )
         self.output.insert(
             tk.END,
-            f"{guard_intro}\nUse insights from earlier tabs to justify every trade — and always log rationale.",
+            (
+                f"{guard_intro}\n"
+                "Use insights from earlier tabs to justify every trade — "
+                "and always log rationale."
+            ),
         )
 
-    def _show_risk(self) -> None:
-        """Refresh the Topstep guard summary and surface a contextual dialog.
+    def _panic_to_paper(self) -> None:
+        self._apply_panic()
 
-        The check recalculates a sample position size using the configured
-        Topstep profile, updates the guard label colouring, and displays either
-        an informational or warning dialog depending on whether the guard
-        remains in ``OK`` or moves into ``DEFENSIVE_MODE``.
-        """
-        profile = risk.RiskProfile(
-            max_position_size=self.configs["risk"].get("max_position_size", 1),
-            max_daily_loss=self.configs["risk"].get("max_daily_loss", 1000),
-            restricted_hours=self.configs["risk"].get("restricted_trading_hours", []),
-            atr_multiplier_stop=self.configs["risk"].get("atr_multiplier_stop", 2.0),
-            cooldown_losses=self.configs["risk"].get("cooldown_losses", 2),
-            cooldown_minutes=self.configs["risk"].get("cooldown_minutes", 30),
-        )
-        sample_size = risk.position_size(
-            50000, profile, atr=3.5, tick_value=12.5, risk_per_trade=0.01
-        )
-        guard = "OK" if sample_size > 0 else "DEFENSIVE_MODE"
-        self.guard_status.set(f"Topstep Guard: {guard}")
-        if self.guard_label is not None:
-            colour = (
-                DARK_PALETTE["success"] if guard == "OK" else DARK_PALETTE["danger"]
+    def _handle_panic(self, _: tk.Event | None) -> str:
+        self._apply_panic()
+        return "break"
+
+    def _apply_panic(self) -> None:
+        mode_before = self.trading_mode.get()
+        if mode_before != "PAPER":
+            self.trading_mode.set("PAPER")
+        panic_at = datetime.now(timezone.utc).isoformat()
+        self.update_section("trade", {"mode": "PAPER", "panic_at": panic_at})
+        self._update_guard_badge(self._guard_report, "PAPER")
+        self.log_event("Panic trigger fired → forced PAPER mode")
+
+    def _set_mode(self, mode: str) -> None:
+        current = self.trading_mode.get()
+        mode_upper = mode.upper()
+        if mode_upper == current:
+            return
+        if mode_upper == "LIVE":
+            confirmation = messagebox.askyesno(
+                "Switch to live execution",
+                (
+                    "You are about to enable LIVE mode. Confirm that risk checks are complete and "
+                    "brokers are connected before continuing."
+                ),
+                icon="warning",
+                default=messagebox.NO,
             )
-            self.guard_label.configure(foreground=colour)
-        payload = {
-            "profile": profile.__dict__,
-            "suggested_contracts": sample_size,
-            "account_balance_assumed": 50000,
-            "cooldown_policy": {
-                "losses": profile.cooldown_losses,
-                "minutes": profile.cooldown_minutes,
-            },
-            "topstep_guard": guard,
-            "next_steps": "If guard shows DEFENSIVE_MODE, stand down and review journal before trading.",
+            if not confirmation:
+                self.trading_mode.set(current)
+                return
+        self.trading_mode.set(mode_upper)
+        self.update_section("trade", {"mode": mode_upper})
+        self._update_guard_badge(self._guard_report, mode_upper)
+
+    def _refresh_guard(self, *, show_modal: bool) -> GuardReport:
+        risk_config = self.configs.get("risk", {})
+        profile = self._risk_engine.build_profile(risk_config)
+        report = self._risk_engine.evaluate(
+            profile,
+            account_balance=cast(float | None, risk_config.get("account_balance")),
+            atr=cast(float | None, risk_config.get("atr")),
+            tick_value=cast(float | None, risk_config.get("tick_value")),
+            risk_per_trade=cast(float | None, risk_config.get("risk_per_trade")),
+        )
+        self._guard_report = report
+        mode = self.trading_mode.get()
+        self._update_guard_badge(report, mode)
+        payload: Dict[str, object] = {
+            "policy": dict(self._risk_engine.policy_metadata),
+            "report": report.to_dict(),
+            "mode": mode,
         }
         self.output.delete("1.0", tk.END)
         self.output.insert(tk.END, json_dumps(payload))
         self.update_section("trade", payload)
+        if show_modal:
+            self._show_guard_dialog(report)
+        return report
 
-        guard_message = (
-            "Topstep guard assessment completed.\n\n"
-            f"Suggested contracts: {sample_size}.\n"
-            f"Daily loss cap: ${profile.max_daily_loss}.\n"
-            "Cooldown policy: "
-            f"{profile.cooldown_losses} losses → wait {profile.cooldown_minutes} minutes."
-        )
-
-        if guard == "OK":
+    def _show_guard_dialog(self, report: GuardReport) -> None:
+        lines = [
+            f"Suggested contracts: {report.suggested_contracts}",
+            f"Account balance assumption: ${report.account_balance:,.2f}",
+        ]
+        for rule in report.rules:
+            lines.append(f"{rule.title}: {rule.message}")
+        guard_message = "Topstep guard assessment completed.\n\n" + "\n".join(lines)
+        if report.status == "OK":
             messagebox.showinfo("Topstep Guard", guard_message)
+            return
+        warning_suffix = self.ui_setting(
+            "status",
+            "guard",
+            "defensive_warning",
+            default="DEFENSIVE_MODE active. Stand down and review your journal before trading.",
+        )
+        messagebox.showwarning("Topstep Guard", f"{guard_message}\n\n{warning_suffix}")
+
+    def _update_guard_badge(self, report: GuardReport | None, mode: str) -> None:
+        mode_upper = mode.upper()
+        if report is None:
+            caption = self._compose_guard_caption(self._guard_pending_copy, mode_upper)
+            colour = DARK_PALETTE["accent_alt"]
         else:
-            warning_suffix = self.ui_setting(
-                "status",
-                "guard",
-                "defensive_warning",
-                default="DEFENSIVE_MODE active. Stand down and review your journal before trading.",
+            caption = self._compose_guard_caption(
+                f"Topstep Guard: {report.status}", mode_upper
             )
-            warning_message = f"{guard_message}\n\n{warning_suffix}"
-            messagebox.showwarning("Topstep Guard", warning_message)
+            colour = (
+                DARK_PALETTE["success"]
+                if report.status == "OK"
+                else DARK_PALETTE["danger"]
+            )
+        self.guard_status.set(caption)
+        if self.guard_label is not None:
+            self.guard_label.configure(foreground=colour)
+
+    def _compose_guard_caption(self, guard_text: str, mode: str) -> str:
+        label = guard_text.strip()
+        mode_upper = mode.upper()
+        if "mode" in label.lower():
+            return label
+        return f"{label} · Mode {mode_upper}"
 
 
 __all__ = [

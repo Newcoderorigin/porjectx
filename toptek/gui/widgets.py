@@ -228,6 +228,29 @@ class TrainTab(BaseTab):
         X = np.column_stack(list(feat_map.values()))
         y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
 
+        valid_mask = np.all(np.isfinite(X), axis=1)
+        valid_count = int(np.count_nonzero(valid_mask))
+        dropped = len(valid_mask) - valid_count
+        if dropped:
+            self.log_event(
+                f"Dropped {dropped} rows with NaN/inf values before training", level="warning"
+            )
+            X = X[valid_mask]
+            y = y[valid_mask]
+        if X.size == 0:
+            self.status.config(
+                text="Training aborted: all feature rows contained NaN/inf values.",
+                foreground="#b91c1c",
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "Training halted because every computed feature row had missing or infinite values.\n"
+                    "Try increasing the lookback window or verifying source data integrity."
+                ),
+            )
+            return
+
         unique_labels = np.unique(y)
         if unique_labels.size < 2:
             self.status.config(
@@ -260,29 +283,6 @@ class TrainTab(BaseTab):
             )
             self.log_event(f"Model training failed: {exc}", level="error")
             return
-        preprocessing = result.preprocessing or {}
-        prep_notes = []
-        if preprocessing.get("imputed_cells"):
-            prep_notes.append(
-                f"imputed {preprocessing['imputed_cells']} feature values"
-            )
-        if preprocessing.get("dropped_rows"):
-            prep_notes.append(
-                f"dropped {preprocessing['dropped_rows']} all-NaN rows"
-            )
-        if preprocessing.get("dropped_columns"):
-            prep_notes.append(
-                f"removed {preprocessing['dropped_columns']} empty columns"
-            )
-        if result.retained_columns is not None and result.original_feature_count is not None:
-            prep_notes.append(
-                f"retained {len(result.retained_columns)} of {result.original_feature_count} feature columns"
-            )
-        if prep_notes:
-            self.log_event(
-                "Preprocessing summary: " + ", ".join(prep_notes),
-                level="info",
-            )
         calibrate_report = "skipped"
         calibration_detail: str | None = None
         calibration_failed = False

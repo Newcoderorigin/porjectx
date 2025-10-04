@@ -72,56 +72,28 @@ def train_classifier(
 ) -> TrainResult:
     """Train a basic classifier and persist it to ``models_dir``.
 
-    Parameters
-    ----------
-    X:
-        Feature matrix to train on. The routine casts the payload to ``float`` and
-        sanitises non-finite entries prior to fitting.
-    y:
-        Target labels associated with ``X``. The labels must contain at least two
-        distinct classes.
-    model_type:
-        Name of the estimator to fit (``"logistic"`` or ``"gbm"``).
-    models_dir:
-        Directory where the fitted pipeline should be persisted.
-    threshold:
-        Probability threshold for translating predictions into class labels when
-        deriving simple metrics.
-
-    Returns
-    -------
-    TrainResult
-        Metadata about the persisted model, including preprocessing telemetry.
-
     Raises
     ------
     ValueError
-        If the feature matrix is not two-dimensional, lacks usable rows or columns
-        after cleaning, contains invalid target values, or the target labels collapse
-        into a single class.
-
-    Example
-    -------
-    >>> import numpy as np
-    >>> from pathlib import Path
-    >>> X = np.random.rand(120, 4)
-    >>> y = (X[:, 0] > 0.5).astype(int)
-    >>> train_classifier(X, y, models_dir=Path("models"))
-    TrainResult(...)
+        If the feature matrix is not two-dimensional, contains no finite rows after
+        cleaning, or the target labels collapse into a single class.
     """
 
     if X.ndim != 2:
         raise ValueError("Feature matrix must be 2-dimensional")
-
-    X = np.asarray(X, dtype=float)
     y = np.asarray(y).ravel()
 
-    original_feature_count = X.shape[1]
+    if not np.isfinite(X).all() or not np.isfinite(y).all():
+        feature_mask = np.isfinite(X).all(axis=1)
+        label_mask = np.isfinite(y)
+        mask = feature_mask & label_mask
+        X = X[mask]
+        y = y[mask]
+        if X.size == 0:
+            raise ValueError("No valid rows remain after removing NaN/inf values")
 
-    if not np.isfinite(y).all():
-        raise ValueError(
-            "Target labels contain NaN or inf values; clean the labels before training"
-        )
+    if np.unique(y).size < 2:
+        raise ValueError("Training requires at least two target classes")
 
     non_finite_mask = ~np.isfinite(X)
     imputed_cells = int(non_finite_mask.sum())

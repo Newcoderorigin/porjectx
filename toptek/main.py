@@ -49,19 +49,23 @@ def run_cli(args: argparse.Namespace, configs: Dict[str, Dict[str, object]], pat
             logger.error("Training failed: %s", exc)
             return
         preprocess = result.preprocessing or {}
-        if preprocess:
-            logger.info(
-                "Preprocessing summary: imputed=%s dropped_rows=%s dropped_columns=%s",
-                preprocess.get("imputed_cells", 0),
-                preprocess.get("dropped_rows", 0),
-                preprocess.get("dropped_columns", 0),
-            )
-        if result.retained_columns is not None and result.original_feature_count is not None:
-            logger.info(
-                "Retained %s of %s feature columns after cleaning",
-                len(result.retained_columns),
-                result.original_feature_count,
-            )
+        logger.info(
+            "Preprocessing summary: imputed=%s dropped_rows=%s dropped_columns=%s",
+            preprocess.get("imputed_cells", 0),
+            preprocess.get("dropped_rows", 0),
+            preprocess.get("dropped_columns", 0),
+        )
+        if result.original_feature_count is not None:
+            if result.retained_columns is not None:
+                logger.info(
+                    "Retained %s of %s feature columns after cleaning",
+                    len(result.retained_columns),
+                    result.original_feature_count,
+                )
+            else:
+                logger.info(
+                    "All %s original feature columns retained", result.original_feature_count
+                )
         logger.info("Training complete: metrics=%s threshold=%.2f", result.metrics, result.threshold)
     elif args.cli == "backtest":
         returns = np.log(df["close"]).diff().fillna(0).to_numpy()

@@ -150,11 +150,16 @@ def train_classifier(
     else:
         retained_columns = None
 
-    if np.unique(y).size < 2:
+    classes, class_counts = np.unique(y, return_counts=True)
+    if classes.size < 2:
         raise ValueError("Training requires at least two target classes")
+    if class_counts.min() < 2:
+        raise ValueError(
+            "Each class needs at least two samples to support a validation split"
+        )
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, shuffle=True, random_state=42
+        X, y, test_size=0.2, shuffle=True, random_state=42, stratify=y
     )
 
     if model_type == "logistic":
@@ -176,7 +181,9 @@ def train_classifier(
     preds = (proba >= threshold).astype(int)
     metrics = {
         "accuracy": float(accuracy_score(y_test, preds)),
-        "roc_auc": float(roc_auc_score(y_test, proba)),
+        "roc_auc": float(roc_auc_score(y_test, proba))
+        if np.unique(y_test).size > 1
+        else float("nan"),
     }
     models_dir.mkdir(parents=True, exist_ok=True)
     model_path = models_dir / f"{model_type}_model.pkl"

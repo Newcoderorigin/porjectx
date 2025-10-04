@@ -6,14 +6,16 @@ The `toptek/requirements-lite.txt` file pins the scientific stack to keep it
 compatible with the bundled scikit-learn release:
 
 - `scikit-learn==1.3.2`
-- `numpy>=1.21.6,<2.0`
+- `numpy>=1.21.6,<1.28`
 - `scipy>=1.7.3,<1.12`
 
 These ranges follow the support window published by scikit-learn 1.3.x and are
 also consumed transitively by `toptek/requirements-streaming.txt` through its
 `-r requirements-lite.txt` include. Installing within these bounds avoids the
 ABI mismatches that occur with the NumPy/SciPy wheels when using newer major
-releases.
+releases. In particular, upgrading NumPy beyond `<1.28` causes SciPy to raise
+its "compiled against NumPy 1.x" `ImportError`, mirroring the guidance already
+documented in `toptek/README.md`.
 
 ## Verifying the environment
 

@@ -402,6 +402,22 @@ class TradeTab(BaseTab):
         self.output.delete("1.0", tk.END)
         self.output.insert(tk.END, json_dumps(payload))
 
+        guard_message = (
+            "Topstep guard assessment completed.\n\n"
+            f"Suggested contracts: {sample_size}.\n"
+            f"Daily loss cap: ${profile.max_daily_loss}.\n"
+            "Cooldown policy: "
+            f"{profile.cooldown_losses} losses → wait {profile.cooldown_minutes} minutes."
+        )
+
+        if guard == "OK":
+            messagebox.showinfo("Topstep Guard", guard_message)
+        else:
+            warning_message = (
+                f"{guard_message}\n\nDEFENSIVE_MODE active. Stand down and review your journal before trading."
+            )
+            messagebox.showwarning("Topstep Guard", warning_message)
+
 
 __all__ = [
     "LoginTab",

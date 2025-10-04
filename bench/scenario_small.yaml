@@ -1,0 +1,14 @@
+# Lightweight CI bench for the moving-average crossover harness.
+# 512 bars keeps the 200-bar baseline indicator warm while still finishing
+# in milliseconds, so the PERF_CHECK gate stays fast but stable.
+horizon_bars: 512
+max_runtime_seconds: 0.05
+min_trades: 5
+min_steps: 120
+min_hit_rate: 0.25
+min_expectancy: -2.5
+notes: >-
+  Runs a deterministic 32 vs 200 moving-average crossover. We keep the
+  horizon pinned at 512 bars so both windows fully warm up; shorter lookbacks
+  starve the long average and produce zero signals, which previously caused
+  drift between the scenario and perf test expectations.

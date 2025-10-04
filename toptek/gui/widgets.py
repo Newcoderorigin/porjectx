@@ -283,6 +283,9 @@ class TrainTab(BaseTab):
             )
             self.log_event(f"Model training failed: {exc}", level="error")
             return
+        # Ensure this is always defined for downstream payload/logging
+        preprocessing = (getattr(result, "preprocessing", None) or {}).copy()
+
         calibrate_report = "skipped"
         calibration_detail: str | None = None
         calibration_failed = False

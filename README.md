@@ -1,40 +1,68 @@
 # porjectx
 
-## Dependency compatibility
+## Reproducible environment bootstrap
 
-The `toptek/requirements-lite.txt` file pins the scientific stack to keep it
-compatible with the bundled scikit-learn release:
+The numeric stack is pinned via [`constraints.txt`](constraints.txt) to avoid the
+ABI/runtime mismatches that previously caused NumPy/SciPy import errors. The
+root [`requirements.txt`](requirements.txt) includes that constraint file and
+pulls in the toolkit's dependencies from `toptek/requirements-lite.txt`.
 
-- `scikit-learn==1.3.2`
-- `numpy>=1.21.6,<1.28`
-- `scipy>=1.7.3,<1.12`
+On Windows, run the helper script to recreate a clean environment and verify the
+stack:
 
-These ranges follow the support window published by scikit-learn 1.3.x and are
-also consumed transitively by `toptek/requirements-streaming.txt` through its
-`-r requirements-lite.txt` include. Installing within these bounds avoids the
-ABI mismatches that occur with the NumPy/SciPy wheels when using newer major
-releases. In particular, upgrading NumPy beyond `<1.28` causes SciPy to raise
-its "compiled against NumPy 1.x" `ImportError`, mirroring the guidance already
-documented in `toptek/README.md`.
+```powershell
+.\scripts\setup_env.ps1
+```
 
-## Verifying the environment
+The script rebuilds `.venv`, installs from `requirements.txt`, then prints
+`STACK_OK` followed by the resolved versions in JSON form. The check ensures the
+runtime matches `numpy==1.26.4`, `scipy==1.10.1`, and `scikit-learn==1.3.2`
+exactly alongside compatible `pandas`, `joblib`, and `threadpoolctl` wheels.
 
-Use Python **3.10 or 3.11**—matching the guidance in `toptek/README.md`'s
-quickstart—to stay within the wheel support window for SciPy and
-scikit-learn 1.3.x. Python 3.12 is currently unsupported because prebuilt
-SciPy/scikit-learn wheels for that interpreter depend on NumPy ≥1.28 and
-SciPy ≥1.12, which exceed this project's pinned ranges. Create and activate a
-compatible virtual environment, then install and check for dependency issues:
+For POSIX shells the equivalent manual steps are:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
-pip install -r toptek/requirements-lite.txt
-pip check
+pip install -r requirements.txt
 ```
 
-The final `pip check` call should report "No broken requirements found",
-confirming that the pinned dependency set resolves without conflicts. Users on
-Python 3.12 should downgrade to Python 3.10/3.11 or wait for a dependency
-refresh that supports NumPy ≥1.28 and SciPy ≥1.12 before proceeding.
+## Runtime telemetry and guardrails
+
+The entry point now executes `toptek.core.utils.assert_numeric_stack()` and
+`toptek.core.utils.set_seeds(42)` during startup. Version validation writes a
+structured report to `reports/run_stack.json` so crash reports include the exact
+Python and numeric-library versions. Structured logging is initialised via
+`logging.basicConfig` with a rotating file handler targeting
+`logs/toptek_YYYYMMDD.log` alongside console output, keeping telemetry for both
+CLI and GUI sessions.
+
+## UI configuration surface
+
+The manual trading shell and Tkinter dashboard read defaults from
+[`configs/ui.yml`](configs/ui.yml). The file ships with sensible demo values so
+the GUI renders without external data sources:
+
+- `appearance` — theme token (currently `dark`) and accent family used by the
+  style registry.
+- `shell` — defaults for the research symbol/timeframe, training lookback,
+  calibration flag, simulated backtest window, and preferred playbook.
+- `chart` — LiveChart refresh cadence (`fps`), point budget, and price
+  precision used by streaming widgets.
+- `status` — copy for the status banners shown in the Login, Train, Backtest,
+  and Guard tabs so product teams can retune messaging without touching code.
+
+Operators can override the YAML at runtime with environment variables or CLI
+flags:
+
+- Environment variables follow the `TOPTEK_UI_*` convention, e.g.
+  `TOPTEK_UI_SYMBOL`, `TOPTEK_UI_INTERVAL`, `TOPTEK_UI_LOOKBACK_BARS`,
+  `TOPTEK_UI_CALIBRATE`, `TOPTEK_UI_FPS`, and `TOPTEK_UI_THEME`.
+- CLI switches (`--symbol`, `--timeframe`, `--lookback`, `--model`, `--fps`)
+  apply the same overrides for one-off runs and are reflected back into the GUI
+  when it launches.
+
+These controls keep the default Topstep demo intact while making it easy to
+point the toolkit at alternative markets or stress-test higher frequency charts
+without editing source files.

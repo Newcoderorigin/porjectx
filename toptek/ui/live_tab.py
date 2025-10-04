@@ -75,6 +75,7 @@ class LiveTab(_BaseFrame):
         chat_frame = ttk.LabelFrame(self, text="Conversation")
         chat_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 12))
         self._style_text_widget(self.chat_log)
+        self.chat_log.configure(state="disabled")
         self.chat_log.pack(in_=chat_frame, fill=tk.BOTH, expand=True, padx=8, pady=8)
 
         input_frame = ttk.Frame(self, style="DashboardBackground.TFrame")
@@ -101,8 +102,11 @@ class LiveTab(_BaseFrame):
             self.system_prompt_text.insert("1.0", prompt)
 
     def _style_text_widget(self, widget: tk.Text) -> None:
+        original_state = widget.cget("state")
+        if original_state == "disabled":
+            widget.configure(state="normal")
         widget.configure(**TEXT_WIDGET_DEFAULTS)
-        widget.configure(state="normal")
+        widget.configure(state=original_state)
 
     def _handle_enter(self, event: tk.Event) -> None:
         self.send_message()

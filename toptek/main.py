@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any, Dict, Tuple, TYPE_CHECKING, cast
 
@@ -207,9 +208,20 @@ def _apply_cli_overrides(
     )
 
 
+def _guard_interpreter_version() -> None:
+    """Abort early when running on an unsupported Python runtime."""
+
+    if sys.version_info >= (3, 12):
+        raise RuntimeError(
+            "Python 3.12+ is not supported by the pinned scientific stack; "
+            "please use Python 3.10 or 3.11 until compatible wheels are released."
+        )
+
+
 def main() -> None:
     """Program entry point."""
 
+    _guard_interpreter_version()
     utils.assert_numeric_stack()
     load_dotenv(ROOT / ".env")
     configs, ui_settings = load_configs()

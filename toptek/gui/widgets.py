@@ -10,6 +10,7 @@ from typing import Dict
 import numpy as np
 
 from core import backtest, features, model, risk, utils
+from toptek.features import build_features
 from core.data import sample_dataframe
 from core.utils import json_dumps
 
@@ -224,32 +225,35 @@ class TrainTab(BaseTab):
             lookback = 480
         lookback = max(240, min(lookback, 2000))
         df = sample_dataframe(lookback)
-        feat_map = features.compute_features(df)
-        X = np.column_stack(list(feat_map.values()))
-        y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
-
-        valid_mask = np.all(np.isfinite(X), axis=1)
-        valid_count = int(np.count_nonzero(valid_mask))
-        dropped = len(valid_mask) - valid_count
-        if dropped:
-            self.log_event(
-                f"Dropped {dropped} rows with NaN/inf values before training", level="warning"
-            )
-            X = X[valid_mask]
-            y = y[valid_mask]
-        if X.size == 0:
+        try:
+            bundle = build_features(df, cache_dir=self.paths.cache)
+        except ValueError as exc:
             self.status.config(
-                text="Training aborted: all feature rows contained NaN/inf values.",
+                text="Training aborted: feature pipeline returned no usable rows.",
                 foreground="#b91c1c",
             )
             messagebox.showwarning(
                 "Training warning",
                 (
-                    "Training halted because every computed feature row had missing or infinite values.\n"
-                    "Try increasing the lookback window or verifying source data integrity."
+                    "Training halted because the unified feature pipeline discarded all rows.\n"
+                    f"Details: {exc}"
                 ),
             )
+            self.log_event(f"Feature pipeline failure: {exc}", level="error")
             return
+
+        X = bundle.X
+        y = bundle.y
+
+        dropped = int(bundle.meta.get("dropped_rows", 0))
+        if dropped:
+            self.log_event(
+                f"Feature pipeline dropped {dropped} rows before training", level="warning"
+            )
+        elif not len(bundle.meta.get("mask", [])):
+            self.log_event(
+                "Feature pipeline returned data without mask metadata", level="warning"
+            )
 
         unique_labels = np.unique(y)
         if unique_labels.size < 2:

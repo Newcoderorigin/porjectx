@@ -9,7 +9,8 @@ from typing import Dict
 import numpy as np
 from dotenv import load_dotenv
 
-from core import backtest, data, features, model, risk, utils
+from core import backtest, data, model, risk, utils
+from toptek.features import build_features
 
 
 ROOT = Path(__file__).parent
@@ -38,21 +39,22 @@ def run_cli(args: argparse.Namespace, configs: Dict[str, Dict[str, object]], pat
     )
 
     df = data.sample_dataframe()
-    feat_map = features.compute_features(df)
-    X = np.column_stack(list(feat_map.values()))
-    y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
+    try:
+        bundle = build_features(df, cache_dir=paths.cache)
+    except ValueError as exc:
+        logger.error("Feature pipeline failed: %s", exc)
+        return
+
+    X = bundle.X
+    y = bundle.y
+
+    dropped = int(bundle.meta.get("dropped_rows", 0))
+    if dropped:
+        logger.warning("Feature pipeline dropped %s rows prior to training", dropped)
+
+    logger.debug("Feature bundle meta: %s", bundle.meta)
 
     if args.cli == "train":
-        valid_mask = np.all(np.isfinite(X), axis=1)
-        valid_count = int(np.count_nonzero(valid_mask))
-        dropped = len(valid_mask) - valid_count
-        if dropped:
-            logger.warning("Dropping %s rows with NaN/inf values before training", dropped)
-            X = X[valid_mask]
-            y = y[valid_mask]
-        if X.size == 0:
-            logger.error("Training aborted: no valid rows remain after cleaning the dataset")
-            return
         if np.unique(y).size < 2:
             logger.error("Training aborted: dataset lacks class diversity after cleaning")
             return
@@ -74,8 +76,22 @@ def run_cli(args: argparse.Namespace, configs: Dict[str, Dict[str, object]], pat
             bt.expectancy,
         )
     elif args.cli == "paper":
-        atr = feat_map["atr_14"][-1]
-        size = risk.position_size(account_balance=50000, risk_profile=risk_profile, atr=atr, tick_value=12.5)
+        feature_names = bundle.meta.get("feature_names", [])
+        atr_value: float | None = None
+        if "atr_14" in feature_names and bundle.X.size:
+            atr_index = feature_names.index("atr_14")
+            atr_series = bundle.X[:, atr_index]
+            if atr_series.size:
+                atr_value = float(atr_series[-1])
+        if atr_value is None:
+            logger.warning("ATR14 feature unavailable from bundle; unable to size position")
+            return
+        size = risk.position_size(
+            account_balance=50000,
+            risk_profile=risk_profile,
+            atr=atr_value,
+            tick_value=12.5,
+        )
         logger.info("Suggested paper size: %s contracts", size)
     else:
         logger.error("Unknown CLI command: %s", args.cli)

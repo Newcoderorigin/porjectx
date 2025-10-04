@@ -227,7 +227,62 @@ class TrainTab(BaseTab):
         feat_map = features.compute_features(df)
         X = np.column_stack(list(feat_map.values()))
         y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
-        result = model.train_classifier(X, y, model_type=self.model_type.get(), models_dir=self.paths.models)
+
+        valid_mask = np.all(np.isfinite(X), axis=1)
+        valid_count = int(np.count_nonzero(valid_mask))
+        dropped = len(valid_mask) - valid_count
+        if dropped:
+            self.log_event(
+                f"Dropped {dropped} rows with NaN/inf values before training", level="warning"
+            )
+            X = X[valid_mask]
+            y = y[valid_mask]
+        if X.size == 0:
+            self.status.config(
+                text="Training aborted: all feature rows contained NaN/inf values.",
+                foreground="#b91c1c",
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "Training halted because every computed feature row had missing or infinite values.\n"
+                    "Try increasing the lookback window or verifying source data integrity."
+                ),
+            )
+            return
+
+        unique_labels = np.unique(y)
+        if unique_labels.size < 2:
+            self.status.config(
+                text="Training aborted: target labels lack class diversity.", foreground="#b91c1c"
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "Training requires at least two classes after cleaning the dataset.\n"
+                    "Collect more data or adjust preprocessing to obtain both up and down samples."
+                ),
+            )
+            return
+
+        try:
+            result = model.train_classifier(
+                X, y, model_type=self.model_type.get(), models_dir=self.paths.models
+            )
+        except ValueError as exc:
+            self.status.config(
+                text="Training failed due to invalid feature matrix. Review warnings.",
+                foreground="#b91c1c",
+            )
+            messagebox.showwarning(
+                "Training warning",
+                (
+                    "The classifier could not be trained with the current dataset.\n\n"
+                    f"Details: {exc}"
+                ),
+            )
+            self.log_event(f"Model training failed: {exc}", level="error")
+            return
         calibrate_report = "skipped"
         calibration_failed = False
         if self.calibrate_var.get() and len(X) > 60:

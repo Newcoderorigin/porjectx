@@ -43,7 +43,24 @@ def run_cli(args: argparse.Namespace, configs: Dict[str, Dict[str, object]], pat
     y = (np.diff(df["close"], prepend=df["close"].iloc[0]) > 0).astype(int)
 
     if args.cli == "train":
-        result = model.train_classifier(X, y, model_type=args.model, models_dir=paths.models)
+        valid_mask = np.all(np.isfinite(X), axis=1)
+        valid_count = int(np.count_nonzero(valid_mask))
+        dropped = len(valid_mask) - valid_count
+        if dropped:
+            logger.warning("Dropping %s rows with NaN/inf values before training", dropped)
+            X = X[valid_mask]
+            y = y[valid_mask]
+        if X.size == 0:
+            logger.error("Training aborted: no valid rows remain after cleaning the dataset")
+            return
+        if np.unique(y).size < 2:
+            logger.error("Training aborted: dataset lacks class diversity after cleaning")
+            return
+        try:
+            result = model.train_classifier(X, y, model_type=args.model, models_dir=paths.models)
+        except ValueError as exc:
+            logger.error("Training failed: %s", exc)
+            return
         logger.info("Training complete: metrics=%s threshold=%.2f", result.metrics, result.threshold)
     elif args.cli == "backtest":
         returns = np.log(df["close"]).diff().fillna(0).to_numpy()

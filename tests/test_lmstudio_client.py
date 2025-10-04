@@ -1,161 +1,117 @@
 from __future__ import annotations
 
-import asyncio
+import json
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Tuple
 
 import pytest
 
-from toptek.ai_server.config import AISettings
-from toptek.ai_server.lmstudio import HTTPError, LMStudioClient
+from toptek.lmstudio import HTTPError, LMStudioClient, Model
 
 
 @dataclass
-class _FakeResponse:
-    status_code: int = 200
-    json_payload: Dict[str, Any] | None = None
+class _StubResponse:
+    status: int = 200
+    body: str | bytes = "{}"
     lines: Iterable[str] | None = None
 
-    def raise_for_status(self) -> None:
-        if self.status_code >= 400:
-            raise HTTPError(f"HTTP status {self.status_code}")
+    def read(self) -> bytes:
+        if isinstance(self.body, bytes):
+            return self.body
+        return self.body.encode("utf-8")
 
-    def json(self) -> Dict[str, Any]:
-        return self.json_payload or {}
-
-    async def aiter_lines(self) -> AsyncIterator[str]:
+    def iter_lines(self) -> Iterable[str]:
         for line in list(self.lines or []):
-            await asyncio.sleep(0)
             yield line
 
 
-class _FakeStreamResponse(_FakeResponse):
-    async def __aenter__(self) -> "_FakeStreamResponse":
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: Optional[type[BaseException]],
-        exc: Optional[BaseException],
-        tb: Optional[Any],
-    ) -> None:
-        return None
-
-
-class _StubAsyncClient:
+class _StubTransport:
     def __init__(self) -> None:
-        self._routes: Dict[tuple[str, str], Any] = {}
-        self.stream_payloads: List[Dict[str, Any]] = []
-        self.closed = False
+        self.routes: Dict[Tuple[str, str], Any] = {}
+        self.requests: List[Tuple[str, str, bytes | None, Dict[str, str] | None]] = []
 
-    def add_get(self, path: str, response: Any) -> None:
-        self._routes[("GET", path)] = response
+    def add(self, method: str, url: str, response: Any) -> None:
+        self.routes[(method, url)] = response
 
-    def add_stream(self, path: str, factory: Any) -> None:
-        self._routes[("STREAM", path)] = factory
-
-    async def get(self, path: str, *args: Any, **kwargs: Any) -> Any:
-        key = ("GET", path)
-        if key not in self._routes:
-            raise AssertionError(f"Unexpected GET {path}")
-        result = self._routes[key]
-        if isinstance(result, Exception):
-            raise result
-        return result
-
-    def stream(
+    def request(
         self,
         method: str,
-        path: str,
+        url: str,
         *,
-        json: Dict[str, Any],
-        timeout: Any,
-    ) -> _FakeStreamResponse:
-        key = ("STREAM", path)
-        if key not in self._routes:
-            raise AssertionError(f"Unexpected stream {method} {path}")
-        factory = self._routes[key]
-        if isinstance(factory, Exception):
-            raise factory
-        self.stream_payloads.append(json)
-        response = factory()
-        if not isinstance(response, _FakeStreamResponse):
-            raise AssertionError("Stream factory must return _FakeStreamResponse")
+        data: bytes | None = None,
+        headers: Dict[str, str] | None = None,
+        timeout: float = 0.0,
+    ) -> _StubResponse:
+        self.requests.append((method, url, data, headers))
+        key = (method, url)
+        if key not in self.routes:
+            raise AssertionError(f"Unexpected request {method} {url}")
+        response = self.routes[key]
+        if isinstance(response, Exception):
+            raise response
         return response
 
-    async def aclose(self) -> None:
-        self.closed = True
 
-
-def _settings() -> AISettings:
-    return AISettings(
-        base_url="http://localhost:1234/v1",
-        port=1234,
-        auto_start=False,
-        poll_interval_seconds=0.1,
-        poll_timeout_seconds=1.0,
-        default_model="stable",
-        default_role="system",
-    )
+def _settings() -> Dict[str, Any]:
+    return {
+        "base_url": "http://localhost:1234/v1",
+        "api_key": "lm-studio",
+        "timeout_s": 30,
+    }
 
 
 def test_list_models_success() -> None:
-    stub = _StubAsyncClient()
-    stub.add_get(
-        "/models",
-        _FakeResponse(
-            status_code=200,
-            json_payload={
-                "data": [
-                    {
-                        "id": "model-a",
-                        "owned_by": "local",
-                        "metadata": {"context_length": 8192, "display_name": "A"},
-                        "capabilities": {"tool_calls": True},
-                    },
-                    {
-                        "id": "model-b",
-                        "metadata": {"context_window": 4096},
-                        "performance": {"tokens_per_second": 40.5, "ttft": 120},
-                    },
-                ]
-            },
+    transport = _StubTransport()
+    url = "http://localhost:1234/v1/models"
+    transport.add(
+        "GET",
+        url,
+        _StubResponse(
+            status=200,
+            body=json.dumps(
+                {
+                    "data": [
+                        {
+                            "id": "model-a",
+                            "owned_by": "local",
+                            "metadata": {"context_length": 8192, "display_name": "Alpha"},
+                        },
+                        {
+                            "id": "model-b",
+                            "metadata": {"context_window": 4096},
+                            "description": "Beta",
+                        },
+                    ]
+                }
+            ),
         ),
     )
 
-    async def _run() -> None:
-        client = LMStudioClient(_settings(), client=stub)
-        models = await client.list_models()
+    client = LMStudioClient(_settings(), transport=transport)
+    models = client.list_models()
 
-        assert [model.model_id for model in models] == ["model-a", "model-b"]
-        assert models[0].supports_tools is True
-        assert models[0].max_context == 8192
-        assert models[1].tokens_per_second == pytest.approx(40.5)
-        assert models[1].ttft == pytest.approx(120.0)
-
-    asyncio.run(_run())
+    assert isinstance(models[0], Model)
+    assert [model.model_id for model in models] == ["model-a", "model-b"]
+    assert models[0].max_context == 8192
+    assert models[0].description == "Alpha"
+    assert models[1].max_context == 4096
 
 
 def test_list_models_http_error() -> None:
-    stub = _StubAsyncClient()
-    stub.add_get("/models", _FakeResponse(status_code=503))
-    async def _run() -> None:
-        client = LMStudioClient(_settings(), client=stub)
-        with pytest.raises(HTTPError):
-            await client.list_models()
+    transport = _StubTransport()
+    transport.add("GET", "http://localhost:1234/v1/models", _StubResponse(status=503))
 
-    asyncio.run(_run())
+    client = LMStudioClient(_settings(), transport=transport)
+    with pytest.raises(HTTPError):
+        client.list_models()
 
 
-def test_health_handles_timeout() -> None:
-    stub = _StubAsyncClient()
-    stub.add_get("/models", HTTPError("timeout"))
-    async def _run() -> None:
-        client = LMStudioClient(_settings(), client=stub)
-        healthy = await client.health()
-        assert healthy is False
+def test_health_handles_failure() -> None:
+    transport = _StubTransport()
+    transport.add("GET", "http://localhost:1234/v1/models", HTTPError("timeout"))
 
-    asyncio.run(_run())
+    client = LMStudioClient(_settings(), transport=transport)
+    assert client.health() is False
 
 
 def test_chat_stream_temperature_zero_is_deterministic() -> None:
@@ -164,23 +120,27 @@ def test_chat_stream_temperature_zero_is_deterministic() -> None:
         "",
         "data: {\"choices\":[{\"delta\":{\"content\":\"!\"}}]}",
     ]
+    transport = _StubTransport()
+    transport.add(
+        "POST",
+        "http://localhost:1234/v1/chat/completions",
+        _StubResponse(status=200, lines=lines),
+    )
 
-    def factory() -> _FakeStreamResponse:
-        return _FakeStreamResponse(status_code=200, lines=lines)
+    client = LMStudioClient(_settings(), transport=transport)
+    payload = {"model": "model-a", "temperature": 0.0, "messages": []}
 
-    async def _run() -> None:
-        stub = _StubAsyncClient()
-        stub.add_stream("/chat/completions", factory)
+    first_run = list(client.chat_stream(payload))
+    second_run = list(client.chat_stream(payload))
 
-        client = LMStudioClient(_settings(), client=stub)
-        payload = {"model": "model-a", "temperature": 0.0, "messages": []}
+    assert first_run == [lines[0], lines[2]]
+    assert second_run == first_run
 
-        first_run = [chunk async for chunk in client.chat_stream(payload)]
-        second_run = [chunk async for chunk in client.chat_stream(payload)]
-
-        assert first_run == [lines[0], lines[2]]
-        assert second_run == first_run
-        assert all(item["temperature"] == 0.0 for item in stub.stream_payloads)
-
-    asyncio.run(_run())
+    request_bodies = [
+        json.loads(body.decode("utf-8"))
+        for _, _, body, _ in transport.requests
+        if body is not None
+    ]
+    for body in request_bodies:
+        assert body["temperature"] == 0.0
 

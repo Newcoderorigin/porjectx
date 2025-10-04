@@ -38,6 +38,16 @@ def _coerce_int(value: Any, field_name: str, *, minimum: int | None = None) -> i
     return coerced
 
 
+def _coerce_float(value: Any, field_name: str, *, minimum: float | None = None) -> float:
+    try:
+        coerced = float(value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise ValueError(f"{field_name} must be a float") from exc
+    if minimum is not None and coerced < minimum:
+        raise ValueError(f"{field_name} must be >= {minimum}")
+    return coerced
+
+
 @dataclass(frozen=True)
 class ShellSettings:
     """Configuration for CLI shell defaults."""
@@ -151,6 +161,92 @@ class ChartSettings:
         if env.get("TOPTEK_UI_CHART_POINTS"):
             updates["max_points"] = _coerce_int(
                 env["TOPTEK_UI_CHART_POINTS"], "env.TOPTEK_UI_CHART_POINTS", minimum=10
+            )
+        return replace(self, **updates) if updates else self
+
+
+@dataclass(frozen=True)
+class LMStudioSettings:
+    """Configuration for the local LM Studio API bridge."""
+
+    enabled: bool = True
+    base_url: str = "http://localhost:1234/v1"
+    api_key: str = "lm-studio"
+    model: str = "llama-3.1-8b-instruct"
+    system_prompt: str = (
+        "You are the Autostealth Evolution assistant. Follow V10 ZERO-CONS."
+    )
+    max_tokens: int = 512
+    temperature: float = 0.0
+    top_p: float = 1.0
+    timeout_s: int = 30
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "LMStudioSettings":
+        enabled_raw = data.get("enabled", cls.enabled)
+        if isinstance(enabled_raw, str):
+            enabled_value = _coerce_bool(enabled_raw, "lmstudio.enabled")
+        elif isinstance(enabled_raw, bool):
+            enabled_value = enabled_raw
+        else:
+            enabled_value = bool(enabled_raw)
+        return cls(
+            enabled=enabled_value,
+            base_url=_coerce_str(data.get("base_url", cls.base_url), "lmstudio.base_url"),
+            api_key=_coerce_str(data.get("api_key", cls.api_key), "lmstudio.api_key"),
+            model=_coerce_str(data.get("model", cls.model), "lmstudio.model"),
+            system_prompt=_coerce_str(
+                data.get("system_prompt", cls.system_prompt), "lmstudio.system_prompt"
+            ),
+            max_tokens=_coerce_int(
+                data.get("max_tokens", cls.max_tokens), "lmstudio.max_tokens", minimum=1
+            ),
+            temperature=_coerce_float(
+                data.get("temperature", cls.temperature),
+                "lmstudio.temperature",
+                minimum=0.0,
+            ),
+            top_p=_coerce_float(
+                data.get("top_p", cls.top_p), "lmstudio.top_p", minimum=0.0
+            ),
+            timeout_s=_coerce_int(
+                data.get("timeout_s", cls.timeout_s), "lmstudio.timeout_s", minimum=1
+            ),
+        )
+
+    def apply_environment(self, env: Mapping[str, str]) -> "LMStudioSettings":
+        updates: Dict[str, Any] = {}
+        if env.get("TOPTEK_LMSTUDIO_ENABLED"):
+            updates["enabled"] = _coerce_bool(
+                env["TOPTEK_LMSTUDIO_ENABLED"], "env.TOPTEK_LMSTUDIO_ENABLED"
+            )
+        if env.get("TOPTEK_LMSTUDIO_BASE_URL"):
+            updates["base_url"] = env["TOPTEK_LMSTUDIO_BASE_URL"]
+        if env.get("TOPTEK_LMSTUDIO_API_KEY"):
+            updates["api_key"] = env["TOPTEK_LMSTUDIO_API_KEY"]
+        if env.get("TOPTEK_LMSTUDIO_MODEL"):
+            updates["model"] = env["TOPTEK_LMSTUDIO_MODEL"]
+        if env.get("TOPTEK_LMSTUDIO_MAX_TOKENS"):
+            updates["max_tokens"] = _coerce_int(
+                env["TOPTEK_LMSTUDIO_MAX_TOKENS"],
+                "env.TOPTEK_LMSTUDIO_MAX_TOKENS",
+                minimum=1,
+            )
+        if env.get("TOPTEK_LMSTUDIO_TEMPERATURE"):
+            updates["temperature"] = _coerce_float(
+                env["TOPTEK_LMSTUDIO_TEMPERATURE"],
+                "env.TOPTEK_LMSTUDIO_TEMPERATURE",
+                minimum=0.0,
+            )
+        if env.get("TOPTEK_LMSTUDIO_TOP_P"):
+            updates["top_p"] = _coerce_float(
+                env["TOPTEK_LMSTUDIO_TOP_P"], "env.TOPTEK_LMSTUDIO_TOP_P", minimum=0.0
+            )
+        if env.get("TOPTEK_LMSTUDIO_TIMEOUT"):
+            updates["timeout_s"] = _coerce_int(
+                env["TOPTEK_LMSTUDIO_TIMEOUT"],
+                "env.TOPTEK_LMSTUDIO_TIMEOUT",
+                minimum=1,
             )
         return replace(self, **updates) if updates else self
 
@@ -298,6 +394,7 @@ class UIConfig:
     appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
     shell: ShellSettings = field(default_factory=ShellSettings)
     chart: ChartSettings = field(default_factory=ChartSettings)
+    lmstudio: LMStudioSettings = field(default_factory=LMStudioSettings)
     status: StatusMessages = field(default_factory=StatusMessages)
 
     @classmethod
@@ -306,6 +403,7 @@ class UIConfig:
             appearance=AppearanceSettings.from_mapping(data.get("appearance", {})),
             shell=ShellSettings.from_mapping(data.get("shell", {})),
             chart=ChartSettings.from_mapping(data.get("chart", {})),
+            lmstudio=LMStudioSettings.from_mapping(data.get("lmstudio", {})),
             status=StatusMessages.from_mapping(data.get("status", {})),
         )
 
@@ -315,6 +413,7 @@ class UIConfig:
             appearance=self.appearance.apply_environment(env),
             shell=self.shell.apply_environment(env),
             chart=self.chart.apply_environment(env),
+            lmstudio=self.lmstudio.apply_environment(env),
         )
 
     def with_updates(
@@ -323,6 +422,7 @@ class UIConfig:
         appearance: Dict[str, Any] | None = None,
         shell: Dict[str, Any] | None = None,
         chart: Dict[str, Any] | None = None,
+        lmstudio: Dict[str, Any] | None = None,
     ) -> "UIConfig":
         """Return a copy of the config with provided section overrides."""
 
@@ -333,6 +433,8 @@ class UIConfig:
             updates["shell"] = replace(self.shell, **shell)
         if chart:
             updates["chart"] = replace(self.chart, **chart)
+        if lmstudio:
+            updates["lmstudio"] = replace(self.lmstudio, **lmstudio)
         return replace(self, **updates) if updates else self
 
     def as_dict(self) -> Dict[str, Any]:
@@ -340,6 +442,7 @@ class UIConfig:
             "appearance": asdict(self.appearance),
             "shell": asdict(self.shell),
             "chart": asdict(self.chart),
+            "lmstudio": asdict(self.lmstudio),
             "status": asdict(self.status),
         }
 
@@ -357,6 +460,7 @@ __all__ = [
     "AppearanceSettings",
     "ShellSettings",
     "ChartSettings",
+    "LMStudioSettings",
     "ReplayStatus",
     "StatusMessages",
     "UIConfig",

@@ -34,6 +34,10 @@ class ToptekApp(ttk.Notebook):
 
     def _build_tabs(self) -> None:
         from . import widgets
+        try:
+            from .live_tab import LiveTab as LiveTradingTab
+        except Exception:  # pragma: no cover - optional dependency guard
+            LiveTradingTab = None
 
         tabs = {
             "Dashboard": (
@@ -65,6 +69,11 @@ class ToptekApp(ttk.Notebook):
                 "Step 6 · Check Topstep guardrails and plan manual execution.",
             ),
         }
+        if LiveTradingTab is not None:
+            tabs["Live"] = (
+                LiveTradingTab,
+                "Step 7 · Engage the LM Studio copilot and dispatch live orders.",
+            )
         for name, (cls, guidance) in tabs.items():
             frame = cls(self, self.configs, self.paths)
             self.add(frame, text=name)

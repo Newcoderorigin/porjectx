@@ -33,3 +33,10 @@ TEXT_WIDGET_DEFAULTS: Dict[str, Any] = {
 }
 
 __all__ = ["DARK_PALETTE", "TEXT_WIDGET_DEFAULTS"]
+
+try:  # Re-export optional Live tab when available
+    from .live_tab import LiveTab  # type: ignore F401
+except ModuleNotFoundError:  # pragma: no cover - legacy deployments
+    LiveTab = None  # type: ignore
+else:
+    __all__.append("LiveTab")

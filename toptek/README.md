@@ -9,8 +9,8 @@ Toptek is a Windows-friendly starter kit for working with the ProjectX Gateway (
 ## Quickstart
 
 ```powershell
-# Windows, Python 3.11
-py -3.11 -m venv .venv
+# Windows, Python 3.10-3.13 (example uses 3.12)
+py -3.12 -m venv .venv
 .venv\Scripts\activate
 pip install --upgrade pip
 pip install -r requirements-lite.txt
@@ -68,7 +68,7 @@ Configuration defaults live under the `config/` folder and are merged with value
 
 ## Requirements profiles
 
-- `requirements-lite.txt`: minimal dependencies for polling workflows. NumPy is capped below 1.28 so the bundled SciPy wheels stay importable; installing NumPy 2.x triggers a SciPy `ImportError` about missing manylinux-compatible binaries.
+- `requirements-lite.txt`: minimal dependencies for polling workflows. Pins the numeric stack to NumPy `>=2.1.2,<2.3`, SciPy `>=1.14.1,<1.16`, and scikit-learn `==1.6.0` so the wheels vetted in `STACK_REQUIREMENTS` (and reiterated in the root README) remain importable across Python 3.10-3.13.
 - `requirements-streaming.txt`: extends the lite profile with optional SignalR streaming support.
 - On start-up `python -m toptek.main` validates that NumPy/SciPy/scikit-learn match the vetted wheels and raises a friendly
   guidance error if the environment drifts. Reinstall with `pip install -r requirements-lite.txt` to resolve mismatches.

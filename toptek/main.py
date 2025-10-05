@@ -360,9 +360,9 @@ def main() -> None:
         run_cli(args, configs, paths)
         return
 
-    from gui.app import launch_app  # imported lazily to avoid Tkinter cost
+    from toptek.ui.main import launch_ui  # imported lazily to avoid Tkinter cost
 
-    launch_app(configs=configs, paths=paths)
+    launch_ui(configs=configs, paths=paths)
 
 
 if __name__ == "__main__":

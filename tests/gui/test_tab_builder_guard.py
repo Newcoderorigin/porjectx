@@ -4,32 +4,68 @@ from __future__ import annotations
 
 import pytest
 
-from toptek.gui.builder import MissingTabBuilderError, invoke_tab_builder
+tk = pytest.importorskip("tkinter")
+from tkinter import ttk
+
+from toptek.gui.builder import invoke_tab_builder
+
+
+def _make_root() -> tk.Tk:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Tk unavailable: {exc}")
+    root.withdraw()
+    return root
 
 
 def test_invoke_tab_builder_calls_callable() -> None:
-    calls: list[bool] = []
+    root = _make_root()
 
-    class Dummy:
+    class Dummy(ttk.Frame):
+        def __init__(self, master: tk.Misc) -> None:
+            super().__init__(master)
+            self.called = False
+
         def _build(self) -> None:
-            calls.append(True)
+            self.called = True
 
-    invoke_tab_builder(Dummy())
-    assert calls == [True]
+    tab = Dummy(root)
+    try:
+        result = invoke_tab_builder(tab)
+        assert tab.called is True
+        assert result is None
+    finally:
+        root.destroy()
 
 
-def test_invoke_tab_builder_raises_when_missing() -> None:
-    class Dummy:
+def test_invoke_tab_builder_renders_placeholder_when_missing() -> None:
+    root = _make_root()
+
+    class Dummy(ttk.Frame):
         pass
 
-    with pytest.raises(MissingTabBuilderError) as excinfo:
-        invoke_tab_builder(Dummy())
-    assert "Dummy" in str(excinfo.value)
+    tab = Dummy(root)
+    try:
+        placeholder = invoke_tab_builder(tab)
+        assert placeholder is not None
+        assert isinstance(placeholder, ttk.Frame)
+        assert placeholder.master is tab
+        assert placeholder.winfo_children()
+    finally:
+        root.destroy()
 
 
-def test_invoke_tab_builder_raises_when_not_callable() -> None:
-    class Dummy:
+def test_invoke_tab_builder_placeholder_when_not_callable() -> None:
+    root = _make_root()
+
+    class Dummy(ttk.Frame):
         _build = None
 
-    with pytest.raises(MissingTabBuilderError):
-        invoke_tab_builder(Dummy())
+    tab = Dummy(root)
+    try:
+        placeholder = invoke_tab_builder(tab)
+        assert placeholder is not None
+        assert placeholder.master is tab
+    finally:
+        root.destroy()

@@ -21,18 +21,27 @@ class MissingTabBuilderError(RuntimeError):
         )
 
 
-def invoke_tab_builder(tab: object, *, attr: str = "_build") -> None:
+def invoke_tab_builder(tab: object, *, attr: str = "_build") -> ttk.Frame | None:
     """Invoke the tab layout builder if available.
 
-    If *attr* is missing or not callable the function raises
-    :class:`MissingTabBuilderError` so callers can provide a fallback view
-    instead of crashing the entire GUI launch.
+    When *attr* is missing or not callable, a friendly placeholder is rendered
+    so the surrounding notebook can continue initialising without raising a
+    hard exception.
     """
 
     builder = getattr(tab, attr, None)
-    if not callable(builder):
-        raise MissingTabBuilderError(tab.__class__.__name__, attr)
-    builder()
+    if callable(builder):
+        builder()
+        return None
+
+    error = MissingTabBuilderError(tab.__class__.__name__, attr)
+    if isinstance(tab, tk.Misc):
+        placeholder = build_missing_tab_placeholder(
+            tab, tab_name=tab.__class__.__name__, error=error
+        )
+        placeholder.pack(fill=tk.BOTH, expand=True)
+        return placeholder
+    raise error
 
 
 def build_missing_tab_placeholder(

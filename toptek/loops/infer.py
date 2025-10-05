@@ -70,7 +70,7 @@ class PredictionService:
         )
         self.features_hash = str(self.card.get("features_hash", ""))
         self._bars: Dict[str, pd.DataFrame] = {}
-        self._known_predictions: Dict[str, set[str]] = {
+        self._known_predictions: Dict[str, set[pd.Timestamp]] = {
             symbol: self._load_existing_predictions(symbol) for symbol in config.symbols
         }
 
@@ -93,7 +93,7 @@ class PredictionService:
         with path.open("rb") as handle:
             return pickle.load(handle)
 
-    def _load_existing_predictions(self, symbol: str) -> set[str]:
+    def _load_existing_predictions(self, symbol: str) -> set[pd.Timestamp]:
         cursor = self.conn.execute(
             "SELECT ts FROM model_predictions WHERE symbol = ? ORDER BY ts", (symbol,)
         )

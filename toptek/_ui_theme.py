@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from functools import lru_cache
 from typing import Mapping
 
 from toptek.gui import DARK_PALETTE
@@ -27,10 +28,23 @@ def _resolve_theme_name(theme: str | None) -> str | None:
     return _THEME_TOKEN_MAP.get(canonical, theme)
 
 
+@lru_cache(maxsize=1)
+def _import_ttkbootstrap():  # pragma: no cover - optional dependency
+    try:
+        import ttkbootstrap  # type: ignore
+    except Exception:
+        return None
+    return ttkbootstrap
+
+
 def get_window(theme: str | None):
     """Return a themed root window using ttkbootstrap when available."""
 
     resolved = _resolve_theme_name(theme)
+    ttkbootstrap = _import_ttkbootstrap()
+    if ttkbootstrap is not None:
+        themename = resolved or "superhero"
+        return ttkbootstrap.Window(themename=themename)
     if _ttkbootstrap is not None:
         themename = resolved or "superhero"
         return _ttkbootstrap.Window(themename=themename)
@@ -43,6 +57,7 @@ def get_window(theme: str | None):
 def apply_base_spacing(root: tk.Misc) -> None:
     """Apply baseline spacing tweaks for classic Tk deployments."""
 
+    if _import_ttkbootstrap() is not None:
     if _ttkbootstrap is not None:
         return
 

@@ -9,6 +9,7 @@ from typing import Callable, Dict, List
 from core import utils
 
 from . import DARK_PALETTE
+from toptek._ui_theme import apply_base_spacing, get_window
 from toptek._ui_theme import BOOTSTRAP_AVAILABLE, apply_base_spacing, get_window
 
 
@@ -275,6 +276,7 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
         if web_handle is None:
             web_message = "Web console assets missing. Run npm run build in toptek/ui/web."
 
+    bootstrap_style = getattr(root, "style", None)
     bootstrap_style = getattr(root, "style", None) if BOOTSTRAP_AVAILABLE else None
 
     if bootstrap_style is not None:

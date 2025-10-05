@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Tuple, TYPE_CHECKING, cast
+from typing import Any, Dict, Mapping, Tuple, TYPE_CHECKING, cast
 
 from dotenv import load_dotenv
 
@@ -20,16 +21,76 @@ if TYPE_CHECKING:  # pragma: no cover - hints only
 ROOT = Path(__file__).parent
 
 
-def load_configs() -> Tuple[Dict[str, Dict[str, object]], "UIConfig"]:
+def _parse_env_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    if not lowered:
+        return None
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def _apply_tv_env_overrides(
+    config: Dict[str, Any], env: Mapping[str, str]
+) -> None:
+    """Merge TradingView-related environment overrides into *config*."""
+
+    tv_section = config.get("tv")
+    if not isinstance(tv_section, dict):
+        tv_section = {}
+        config["tv"] = tv_section
+
+    enabled = _parse_env_bool(env.get("TOPTEK_TV_ENABLED"))
+    if enabled is not None:
+        tv_section["enabled"] = enabled
+
+    symbol = env.get("TOPTEK_TV_SYMBOL")
+    if symbol:
+        tv_section["symbol"] = symbol
+
+    interval = env.get("TOPTEK_TV_INTERVAL")
+    if interval:
+        tv_section["interval"] = interval
+
+    theme = env.get("TOPTEK_TV_THEME")
+    if theme:
+        tv_section["theme"] = theme
+
+    locale = env.get("TOPTEK_TV_LOCALE")
+    if locale:
+        tv_section["locale"] = locale
+
+    tabs = tv_section.get("tabs")
+    if not isinstance(tabs, dict):
+        tabs = {}
+        tv_section["tabs"] = tabs
+
+    for tab_name, env_key in (
+        ("notebook", "TOPTEK_TV_TAB_NOTEBOOK"),
+        ("research", "TOPTEK_TV_TAB_RESEARCH"),
+        ("trade", "TOPTEK_TV_TAB_TRADE"),
+    ):
+        override = _parse_env_bool(env.get(env_key))
+        if override is not None:
+            tabs[tab_name] = override
+def load_configs(
+    env: Mapping[str, str] | None = None,
+) -> Tuple[Dict[str, Dict[str, object]], "UIConfig"]:
     """Load configuration files along with UI defaults."""
 
     from toptek.core import ui_config
 
+    env_mapping = os.environ if env is None else env
     app_cfg = utils.load_yaml(ROOT / "config" / "app.yml")
+    _apply_tv_env_overrides(app_cfg, env_mapping)
     risk_cfg = utils.load_yaml(ROOT / "config" / "risk.yml")
     feature_cfg = utils.load_yaml(ROOT / "config" / "features.yml")
     ui_path = ROOT.parent / "configs" / "ui.yml"
-    ui_cfg = ui_config.load_ui_config(ui_path)
+    ui_cfg = ui_config.load_ui_config(ui_path, env=env_mapping)
     return (
         {
             "app": app_cfg,

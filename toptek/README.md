@@ -36,6 +36,45 @@ Enable the packaged assets by setting `web_frontend.enabled: true` in
 exposes an **Open Web Console** button that serves the bundle from an embedded
 HTTP server.
 
+### TradingView integration
+
+Toptek ships with a lightweight TradingView launcher that keeps browser charts
+in sync with the GUI symbol/timeframe selections. Enable it in
+`config/app.yml` under the `tv` block or via the matching `.env` keys:
+
+```yaml
+tv:
+  enabled: true              # or TOPTEK_TV_ENABLED=1
+  symbol: ES=F               # default chart symbol (TOPTEK_TV_SYMBOL)
+  interval: 5m               # default interval (TOPTEK_TV_INTERVAL)
+  theme: dark                # dark/light theme (TOPTEK_TV_THEME)
+  locale: en                 # locale code (TOPTEK_TV_LOCALE)
+  tabs:                      # per-tab toggles (TOPTEK_TV_TAB_*)
+    notebook: true           # dedicated TradingView tab
+    research: true           # Research tab shortcut
+    trade: true              # Trade tab shortcut
+  favorites:
+    - label: "ES · 5m"
+      symbol: ES=F
+      interval: 5m
+```
+
+The dedicated **TradingView** tab (plus the shortcuts in the Research and Trade
+tabs) launch a browser window using these defaults. `Ctrl+Shift+T` works across
+all tabs and reuses the most recent parameters. Populate the optional
+`tv.favorites` list to pre-load quick presets — each entry accepts `symbol`,
+`interval`, and an optional `label` for the dropdown menu.
+
+Research tab launches inherit the current symbol/timeframe fields so your chart
+follows the data you just pulled. The Trade tab uses the persisted
+TradingView defaults (or the last launch) so guard checks and browser charts
+stay aligned. Every launch is logged to the session state for quick reference.
+
+> **TradingView ToS reminder:** their widgets and charts require attribution and
+> human verification before placing trades. Keep the attribution footer visible
+> and confirm every symbol/interval manually. The launcher simply opens the
+> TradingView chart in your browser — no automated trading is performed.
+
 ## CLI usage examples
 
 ```powershell

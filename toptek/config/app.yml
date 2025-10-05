@@ -6,3 +6,19 @@ web_frontend:
   enabled: false
   port: 5174
   auto_open: false
+tv:
+  enabled: true
+  symbol: ES=F
+  interval: 5m
+  theme: dark
+  locale: en
+  tabs:
+    notebook: true
+    research: true
+    trade: true
+  favorites:
+    # Populate watchlist presets surfaced in the TradingView tab. Each entry
+    # accepts "symbol" and "interval" plus an optional "label" override.
+    - label: "ES · 5m"
+      symbol: ES=F
+      interval: 5m

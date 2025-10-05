@@ -13,6 +13,18 @@ from toptek.api.routes_gateway import RateLimiter, register_gateway_routes
 class DummyGateway:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+        self.account_response: dict[str, object] = {
+            "accounts": [
+                {
+                    "accountId": "U12345",
+                    "accountName": "Main",
+                    "available": 125000.0,
+                    "allocated": 50000.0,
+                    "profit": 2500.5,
+                    "equity": 175000.5,
+                }
+            ]
+        }
 
     def place_order(self, payload: dict[str, object]) -> dict[str, object]:
         self.calls.append(("place_order", dict(payload)))
@@ -20,6 +32,10 @@ class DummyGateway:
 
     def login(self) -> None:
         self.calls.append(("login", {}))
+
+    def search_accounts(self, payload: dict[str, object]) -> dict[str, object]:
+        self.calls.append(("search_accounts", dict(payload)))
+        return dict(self.account_response)
 
     def __getattr__(self, item: str):
         def _call(payload: dict[str, object]) -> dict[str, object]:
@@ -188,3 +204,56 @@ def test_gateway_health_captures_failures() -> None:
     assert "login failed" in report["details"]["rest"]
     assert "hub down" in report["details"]["market_hub"]
     assert "hub down" in report["details"]["user_hub"]
+
+
+def test_gateway_account_snapshot() -> None:
+    app = FastAPI(title="test")
+    gateway = DummyGateway()
+    limiter = DummyLimiter()
+    settings = _settings()
+
+    register_gateway_routes(
+        app,
+        gateway_settings=settings,
+        gateway=gateway,
+        rate_limiter=limiter,
+    )
+
+    handler = app.get_route("GET", "/gateway/account")
+    request = SimpleNamespace(headers={"X-API-Key": settings.api_key})
+    snapshot = asyncio.run(handler(request))
+
+    assert snapshot == {
+        "accounts": [
+            {
+                "id": "U12345",
+                "name": "Main",
+                "available": 125000.0,
+                "allocated": 50000.0,
+                "profit": 2500.5,
+                "equity": 175000.5,
+            }
+        ]
+    }
+    assert ("search_accounts", {}) in gateway.calls
+    assert limiter.entered >= 1
+
+
+def test_gateway_account_requires_api_key() -> None:
+    app = FastAPI(title="test")
+    gateway = DummyGateway()
+    settings = _settings()
+
+    register_gateway_routes(
+        app,
+        gateway_settings=settings,
+        gateway=gateway,
+    )
+
+    handler = app.get_route("GET", "/gateway/account")
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(handler(SimpleNamespace(headers={})))
+
+    assert excinfo.value.status_code == 401
+    assert ("search_accounts", {}) not in gateway.calls

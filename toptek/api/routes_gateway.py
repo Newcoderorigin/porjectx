@@ -67,6 +67,51 @@ def _normalize_payload(payload: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     raise HTTPException(status_code=400, detail="Payload must be an object")
 
 
+def _coerce_float(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _numeric_field(raw: Mapping[str, Any], *candidates: str) -> float:
+    for key in candidates:
+        if key in raw and raw[key] is not None:
+            return _coerce_float(raw[key])
+    return 0.0
+
+
+def _summarize_accounts(response: Mapping[str, Any]) -> Dict[str, Any]:
+    accounts = response.get("accounts")
+    if not isinstance(accounts, list) or not accounts:
+        raise HTTPException(status_code=502, detail="Gateway returned no accounts")
+
+    summaries = []
+    for raw in accounts:
+        if not isinstance(raw, Mapping):
+            continue
+        summary = {
+            "id": raw.get("accountId") or raw.get("id"),
+            "name": raw.get("accountName") or raw.get("name"),
+            "available": _numeric_field(raw, "available", "cashAvailable"),
+            "allocated": _numeric_field(raw, "allocated", "marginUsed"),
+            "profit": _numeric_field(raw, "profit", "profitLoss"),
+            "equity": _numeric_field(raw, "equity", "netLiquidation"),
+        }
+        summaries.append(summary)
+
+    if not summaries:
+        raise HTTPException(
+            status_code=502, detail="Gateway returned invalid account payload"
+        )
+
+    return {"accounts": summaries}
+
+
 def _headers_from_request(request: Request | None) -> Mapping[str, str]:
     if request is None:
         return {}
@@ -177,6 +222,17 @@ def register_gateway_routes(
         await _probe_hub(settings.market_hub_base, settings.market_hub_path, "market_hub")
         await _probe_hub(settings.user_hub_base, settings.user_hub_path, "user_hub")
         return report
+
+    @app.get("/gateway/account")
+    async def gateway_account(request: Request | None = None) -> Dict[str, Any]:
+        headers = _headers_from_request(request)
+        _require_api_key(headers, settings.api_key)
+        raw = await _call_gateway(client.search_accounts, {}, limiter)
+        if not isinstance(raw, Mapping):
+            raise HTTPException(
+                status_code=502, detail="Gateway returned unexpected account payload"
+            )
+        return _summarize_accounts(raw)
 
     async def _reject_websocket(websocket: WebSocket, *, reason: str) -> None:
         await websocket.close(code=1008, reason=reason)

@@ -57,12 +57,15 @@ def record_prediction(**kwargs: Any) -> None:
             "features_hash": kwargs.get("features_hash"),
             "decision_threshold": kwargs.get("decision_threshold"),
             "chosen": kwargs.get("chosen"),
+            "realized_hit": kwargs.get("realized_hit"),
+            "realized_return": kwargs.get("realized_return"),
+            "realized_ts": kwargs.get("realized_ts"),
             "meta": json.dumps(kwargs.get("meta", {})),
         }
         conn.execute(
             (
-                "INSERT OR REPLACE INTO model_predictions(pred_id, ts, symbol, prob_up, prob_down, model_ver, features_hash, decision_threshold, chosen, meta) "
-                "VALUES (:pred_id, :ts, :symbol, :prob_up, :prob_down, :model_ver, :features_hash, :decision_threshold, :chosen, :meta)"
+                "INSERT OR REPLACE INTO model_predictions(pred_id, ts, symbol, prob_up, prob_down, model_ver, features_hash, decision_threshold, chosen, realized_hit, realized_return, realized_ts, meta) "
+                "VALUES (:pred_id, :ts, :symbol, :prob_up, :prob_down, :model_ver, :features_hash, :decision_threshold, :chosen, :realized_hit, :realized_return, :realized_ts, :meta)"
             ),
             payload,
         )

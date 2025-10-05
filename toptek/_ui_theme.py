@@ -53,18 +53,8 @@ def _patch_bootstrap_keywords() -> None:
     available_builders = {name for name in dir(StyleBuilderTTK) if name.endswith("_style")}
 
     def _supports(token: str) -> bool:
-        prefix = f"create_{token}_"
-        matching_suffixes = {
-            builder[len(prefix) : -len("_style")]
-            for builder in available_builders
-            if builder.startswith(prefix)
-        }
-        if not matching_suffixes:
-            return False
-        if token == "input":
-            required = {"entry", "combobox", "spinbox", "radiobutton", "checkbutton"}
-            return required.issubset(matching_suffixes)
-        return True
+        prefix = f"create_{token}"
+        return any(builder.startswith(prefix) for builder in available_builders)
 
     for token in ("outline", "link", "inverse"):
         if _supports(token):
@@ -81,6 +71,27 @@ def _patch_bootstrap_keywords() -> None:
         return
 
     Keywords.TYPE_PATTERN = re.compile("|".join(supported_tokens))
+    tokens = [
+        "outline",
+        "link",
+        "inverse",
+    ]
+    if hasattr(StyleBuilderTTK, "create_round_frame_style"):
+        tokens.append(r"\\bround\\b")
+    tokens.extend(
+        [
+            "square",
+            "striped",
+            "focus",
+            "input",
+            "date",
+            "metersubtxt",
+            "meter",
+            "table",
+        ]
+    )
+
+    Keywords.TYPE_PATTERN = re.compile("|".join(tokens))
     Keywords._toptek_background_patch = True
 
 

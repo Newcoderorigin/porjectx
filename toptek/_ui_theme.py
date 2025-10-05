@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tkinter as tk
 from functools import lru_cache
 from typing import Mapping
@@ -37,12 +38,32 @@ def _import_ttkbootstrap():  # pragma: no cover - optional dependency
     return ttkbootstrap
 
 
+def _patch_bootstrap_keywords() -> None:
+    """Prevent ttkbootstrap from mis-detecting our custom style names."""
+
+    try:  # pragma: no cover - optional dependency
+        from ttkbootstrap.style import Keywords  # type: ignore
+    except Exception:  # pragma: no cover - defensive
+        return
+
+    if getattr(Keywords, "_toptek_background_patch", False):
+        return
+
+    Keywords.TYPE_PATTERN = re.compile(
+        "outline|link|inverse|\\bround\\b|square|striped|focus|input|date|metersubtxt|meter|table"
+    )
+    Keywords._toptek_background_patch = True
+
+
 def get_window(theme: str | None):
     """Return a themed root window using ttkbootstrap when available."""
 
     resolved = _resolve_theme_name(theme)
     ttkbootstrap = _import_ttkbootstrap()
     if ttkbootstrap is not None:
+        _patch_bootstrap_keywords()
+        themename = resolved or "superhero"
+        return ttkbootstrap.Window(themename=themename)
         themename = resolved or "superhero"
         return ttkbootstrap.Window(themename=themename)
     if _ttkbootstrap is not None:

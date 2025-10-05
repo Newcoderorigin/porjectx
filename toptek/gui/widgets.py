@@ -22,6 +22,24 @@ from toptek.risk import GuardReport, RiskEngine
 from toptek.replay import ReplayBar, ReplaySimulator
 
 from . import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
+try:  # pragma: no cover - fallback for legacy installs
+    from .builder import invoke_tab_builder, MissingTabBuilderError  # type: ignore
+except Exception:  # pragma: no cover - defensive compatibility
+    class MissingTabBuilderError(RuntimeError):
+        """Fallback error raised when a tab builder is missing."""
+
+        def __init__(self, tab_name: str, attr: str = "_build") -> None:
+            self.tab_name = tab_name
+            self.attr = attr
+            super().__init__(
+                f"{tab_name} is missing a callable '{attr}()' layout builder."
+            )
+
+    def invoke_tab_builder(tab: object, *, attr: str = "_build") -> None:
+        builder = getattr(tab, attr, None)
+        if not callable(builder):
+            raise MissingTabBuilderError(tab.__class__.__name__, attr)
+        builder()
 from .tradingview import TradingViewDefaults, TradingViewRouter
 
 
@@ -279,6 +297,8 @@ class DashboardTab(BaseTab):
         self.training_value = tk.StringVar()
         self.training_caption = tk.StringVar()
         self.chart_summary = tk.StringVar()
+        super().__init__(master, configs, paths)
+        invoke_tab_builder(self)
         super().__init__(master, configs, paths, tv_router=tv_router)
         self._build()
         self._refresh_metrics()
@@ -441,6 +461,8 @@ class LoginTab(BaseTab):
         *,
         tv_router: TradingViewRouter | None = None,
     ) -> None:
+        super().__init__(master, configs, paths)
+        invoke_tab_builder(self)
         super().__init__(master, configs, paths, tv_router=tv_router)
         self._build()
 
@@ -548,6 +570,8 @@ class ResearchTab(BaseTab):
         *,
         tv_router: TradingViewRouter | None = None,
     ) -> None:
+        super().__init__(master, configs, paths)
+        invoke_tab_builder(self)
         super().__init__(master, configs, paths, tv_router=tv_router)
         self._build()
 
@@ -720,6 +744,8 @@ class TrainTab(BaseTab):
         *,
         tv_router: TradingViewRouter | None = None,
     ) -> None:
+        super().__init__(master, configs, paths)
+        invoke_tab_builder(self)
         super().__init__(master, configs, paths, tv_router=tv_router)
         self._build()
 
@@ -965,6 +991,8 @@ class BacktestTab(BaseTab):
         *,
         tv_router: TradingViewRouter | None = None,
     ) -> None:
+        super().__init__(master, configs, paths)
+        invoke_tab_builder(self)
         super().__init__(master, configs, paths, tv_router=tv_router)
         self._build()
 

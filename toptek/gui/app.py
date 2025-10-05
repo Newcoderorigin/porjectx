@@ -9,6 +9,47 @@ from typing import Callable, Dict, List
 from core import utils
 
 from . import DARK_PALETTE
+try:  # pragma: no cover - fallback for legacy installs
+    from .builder import MissingTabBuilderError, build_missing_tab_placeholder  # type: ignore
+except Exception:  # pragma: no cover - defensive compatibility
+    class MissingTabBuilderError(RuntimeError):
+        """Fallback error when a tab lacks its layout builder."""
+
+        def __init__(self, tab_name: str, attr: str = "_build") -> None:
+            self.tab_name = tab_name
+            self.attr = attr
+            super().__init__(
+                f"{tab_name} is missing a callable '{attr}()' layout builder."
+            )
+
+    def build_missing_tab_placeholder(
+        parent: tk.Misc, *, tab_name: str, error: MissingTabBuilderError
+    ) -> ttk.Frame:
+        frame = ttk.Frame(parent, style="DashboardBackground.TFrame")
+        frame.columnconfigure(0, weight=1)
+        heading = ttk.Label(
+            frame,
+            text=f"{tab_name} upgrade required",
+            style="Surface.TLabel",
+            justify=tk.LEFT,
+            anchor=tk.W,
+        )
+        heading.grid(row=0, column=0, sticky=tk.W, padx=16, pady=(18, 6))
+        body = ttk.Label(
+            frame,
+            text=(
+                "This tab could not be initialised because its layout helper is "
+                "missing. Please update to the latest ProjectX cockpit build "
+                "and restart the application.\n\nDetails: "
+                f"{error}"
+            ),
+            style="Surface.TLabel",
+            wraplength=520,
+            justify=tk.LEFT,
+            anchor=tk.W,
+        )
+        body.grid(row=1, column=0, sticky=tk.W, padx=16, pady=(0, 18))
+        return frame
 from .webshell import WebFrontendHandle, launch_web_frontend
 from .tradingview import TradingViewRouter
 
@@ -31,6 +72,7 @@ class ToptekApp(ttk.Notebook):
         self._tab_names: List[str] = []
         self._tab_guidance: Dict[str, str] = {}
         self._tab_widgets: Dict[str, ttk.Frame] = {}
+        self.logger = utils.build_logger(self.__class__.__name__)
         self._tv_router = TradingViewRouter(
             configs.get("app", {}),
             configs.get("ui", {}),

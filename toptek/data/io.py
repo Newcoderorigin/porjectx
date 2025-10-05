@@ -83,13 +83,29 @@ def run_migrations(conn: sqlite3.Connection) -> None:
             features_hash TEXT,
             decision_threshold REAL,
             chosen INTEGER,
+            realized_hit INTEGER,
+            realized_return REAL,
+            realized_ts TEXT,
             meta TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS market_bars (
+            symbol TEXT NOT NULL,
+            ts TEXT NOT NULL,
+            open REAL NOT NULL,
+            high REAL NOT NULL,
+            low REAL NOT NULL,
+            close REAL NOT NULL,
+            volume REAL NOT NULL,
+            PRIMARY KEY (symbol, ts)
         );
 
         CREATE INDEX IF NOT EXISTS idx_trades_symbol_ts
             ON trades(symbol, entry_ts);
         CREATE INDEX IF NOT EXISTS idx_predictions_symbol_ts
             ON model_predictions(symbol, ts);
+        CREATE INDEX IF NOT EXISTS idx_bars_symbol_ts
+            ON market_bars(symbol, ts);
         """
     )
     conn.commit()
@@ -184,6 +200,9 @@ def _generate_trades_and_predictions(bars: pd.DataFrame) -> tuple[pd.DataFrame, 
                 "features_hash": f"hash_{i}",
                 "decision_threshold": 0.5,
                 "chosen": chosen,
+                "realized_hit": label_hit,
+                "realized_return": ret,
+                "realized_ts": exit_ts.isoformat(),
                 "meta": "{}",
             }
         )
@@ -220,10 +239,31 @@ def load_demo_data(
     conn.executemany(
         (
             "INSERT OR REPLACE INTO model_predictions(" \
-            "pred_id, ts, symbol, prob_up, prob_down, model_ver, features_hash, decision_threshold, chosen, meta) "
-            "VALUES (:pred_id, :ts, :symbol, :prob_up, :prob_down, :model_ver, :features_hash, :decision_threshold, :chosen, :meta)"
+            "pred_id, ts, symbol, prob_up, prob_down, model_ver, features_hash, decision_threshold, chosen, realized_hit, realized_return, realized_ts, meta) "
+            "VALUES (:pred_id, :ts, :symbol, :prob_up, :prob_down, :model_ver, :features_hash, :decision_threshold, :chosen, :realized_hit, :realized_return, :realized_ts, :meta)"
         ),
         preds_df.to_dict(orient="records"),
+    )
+    bar_records = []
+    for _, row in bars.reset_index().iterrows():
+        bar_records.append(
+            {
+                "symbol": "DEMO",
+                "ts": pd.Timestamp(row["ts"]).isoformat(),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row["volume"]),
+            }
+        )
+    conn.executemany(
+        (
+            "INSERT OR REPLACE INTO market_bars(" \
+            "symbol, ts, open, high, low, close, volume) "
+            "VALUES (:symbol, :ts, :open, :high, :low, :close, :volume)"
+        ),
+        bar_records,
     )
     conn.commit()
 

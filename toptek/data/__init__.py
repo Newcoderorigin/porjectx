@@ -1,5 +1,6 @@
 """Data access package exposing IO utilities."""
 
+from .feeds import BarRecord, SQLiteBarFeed
 from .io import (
     DATA_DIR,
     VAR_DIR,
@@ -18,4 +19,6 @@ __all__ = [
     "export_to_parquet",
     "load_demo_data",
     "run_migrations",
+    "BarRecord",
+    "SQLiteBarFeed",
 ]

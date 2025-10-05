@@ -28,6 +28,8 @@ jobs:
       - name: Black
         run: black --check .
       - name: Pytest
+        env:
+          TOPTEK_SKIP_TRACE_COVERAGE: 1
         run: pytest -q
       - name: Mypy (informational)
         continue-on-error: true

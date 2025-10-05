@@ -140,7 +140,15 @@ class ToptekApp(ttk.Notebook):
                 )
 
         for name, factory, guidance in tabs:
-            frame = factory(self)
+            try:
+                frame = factory(self)
+            except MissingTabBuilderError as error:
+                self.logger.error(
+                    "Failed to build %s tab", name, exc_info=error
+                )
+                frame = build_missing_tab_placeholder(
+                    self, tab_name=name, error=error
+                )
             self.add(frame, text=name)
             self._tab_names.append(name)
             self._tab_guidance[name] = guidance

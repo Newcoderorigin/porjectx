@@ -256,10 +256,10 @@ def _filter_dataframe_by_start(df, start: datetime):
 def _guard_interpreter_version() -> None:
     """Abort early when running on an unsupported Python runtime."""
 
-    if sys.version_info >= (3, 12):
+    if sys.version_info >= (3, 14):
         raise RuntimeError(
-            "Python 3.12+ is not supported by the pinned scientific stack; "
-            "please use Python 3.10 or 3.11 until compatible wheels are released."
+            "Python 3.14+ is not supported by the pinned scientific stack; "
+            "please use Python 3.10 through 3.13 until compatible wheels are released."
         )
 
 

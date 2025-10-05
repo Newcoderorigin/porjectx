@@ -42,16 +42,45 @@ def _patch_bootstrap_keywords() -> None:
     """Prevent ttkbootstrap from mis-detecting our custom style names."""
 
     try:  # pragma: no cover - optional dependency
-        from ttkbootstrap.style import Keywords  # type: ignore
+        from ttkbootstrap.style import Keywords, StyleBuilderTTK  # type: ignore
     except Exception:  # pragma: no cover - defensive
         return
 
     if getattr(Keywords, "_toptek_background_patch", False):
         return
 
-    Keywords.TYPE_PATTERN = re.compile(
-        "outline|link|inverse|\\bround\\b|square|striped|focus|input|date|metersubtxt|meter|table"
-    )
+    supported_tokens: list[str] = []
+    available_builders = {name for name in dir(StyleBuilderTTK) if name.endswith("_style")}
+
+    def _supports(token: str) -> bool:
+        prefix = f"create_{token}_"
+        matching_suffixes = {
+            builder[len(prefix) : -len("_style")]
+            for builder in available_builders
+            if builder.startswith(prefix)
+        }
+        if not matching_suffixes:
+            return False
+        if token == "input":
+            required = {"entry", "combobox", "spinbox", "radiobutton", "checkbutton"}
+            return required.issubset(matching_suffixes)
+        return True
+
+    for token in ("outline", "link", "inverse"):
+        if _supports(token):
+            supported_tokens.append(token)
+
+    if _supports("round"):
+        supported_tokens.append(r"\\bround\\b")
+
+    for token in ("square", "striped", "focus", "input", "date", "metersubtxt", "meter", "table"):
+        if _supports(token):
+            supported_tokens.append(token)
+
+    if not supported_tokens:
+        return
+
+    Keywords.TYPE_PATTERN = re.compile("|".join(supported_tokens))
     Keywords._toptek_background_patch = True
 
 
@@ -62,8 +91,6 @@ def get_window(theme: str | None):
     ttkbootstrap = _import_ttkbootstrap()
     if ttkbootstrap is not None:
         _patch_bootstrap_keywords()
-        themename = resolved or "superhero"
-        return ttkbootstrap.Window(themename=themename)
         themename = resolved or "superhero"
         return ttkbootstrap.Window(themename=themename)
     if _ttkbootstrap is not None:
@@ -78,8 +105,7 @@ def get_window(theme: str | None):
 def apply_base_spacing(root: tk.Misc) -> None:
     """Apply baseline spacing tweaks for classic Tk deployments."""
 
-    if _import_ttkbootstrap() is not None:
-    if _ttkbootstrap is not None:
+    if _import_ttkbootstrap() is not None or _ttkbootstrap is not None:
         return
 
     root.option_add("*TCombobox*Listbox.background", DARK_PALETTE["surface"])

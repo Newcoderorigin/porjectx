@@ -9,8 +9,7 @@ from typing import Callable, Dict, List
 from core import utils
 
 from . import DARK_PALETTE
-from toptek._ui_theme import apply_base_spacing, get_window
-from toptek._ui_theme import BOOTSTRAP_AVAILABLE, apply_base_spacing, get_window
+from toptek._ui_theme import BOOTSTRAP_AVAILABLE
 
 
 def _resolve_bootstrap_accent(accent: object) -> str:
@@ -239,7 +238,9 @@ class ToptekApp(ttk.Notebook):
         self._on_tab_change(index, name, guidance)
 
 
-def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) -> None:
+def launch_app(
+    *, root: tk.Misc, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths
+) -> None:
     """Initialise and start the Tkinter main loop."""
 
     ui_config = configs.get("ui", {})
@@ -249,11 +250,8 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
         if isinstance(maybe_appearance, dict):
             appearance = maybe_appearance
 
-    theme_value = appearance.get("theme") if isinstance(appearance.get("theme"), str) else None
     accent_value = appearance.get("accent") if isinstance(appearance.get("accent"), str) else None
 
-    root = get_window(theme_value)
-    apply_base_spacing(root)
     root.title("Toptek Mission Control")
     root.geometry("1024x680")
 

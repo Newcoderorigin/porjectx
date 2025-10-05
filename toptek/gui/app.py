@@ -9,6 +9,24 @@ from typing import Callable, Dict, List
 from core import utils
 
 from . import DARK_PALETTE
+from toptek._ui_theme import apply_base_spacing, get_window
+
+
+def _resolve_bootstrap_accent(accent: object) -> str:
+    if isinstance(accent, str):
+        token = accent.strip().lower()
+    else:
+        token = ""
+
+    accent_map = {
+        "violet": "primary",
+        "cyan": "info",
+        "orange": "warning",
+        "green": "success",
+        "red": "danger",
+    }
+
+    return accent_map.get(token, "primary")
 try:  # pragma: no cover - fallback for legacy installs
     from .builder import MissingTabBuilderError, build_missing_tab_placeholder  # type: ignore
 except Exception:  # pragma: no cover - defensive compatibility
@@ -223,7 +241,18 @@ class ToptekApp(ttk.Notebook):
 def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) -> None:
     """Initialise and start the Tkinter main loop."""
 
-    root = tk.Tk()
+    ui_config = configs.get("ui", {})
+    appearance = {}
+    if isinstance(ui_config, dict):
+        maybe_appearance = ui_config.get("appearance", {})
+        if isinstance(maybe_appearance, dict):
+            appearance = maybe_appearance
+
+    theme_value = appearance.get("theme") if isinstance(appearance.get("theme"), str) else None
+    accent_value = appearance.get("accent") if isinstance(appearance.get("accent"), str) else None
+
+    root = get_window(theme_value)
+    apply_base_spacing(root)
     root.title("Toptek Mission Control")
     root.geometry("1024x680")
 
@@ -246,296 +275,345 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
         if web_handle is None:
             web_message = "Web console assets missing. Run npm run build in toptek/ui/web."
 
-    style = ttk.Style()
-    try:
-        style.theme_use("clam")
-    except tk.TclError:
-        # ``clam`` is widely available, but gracefully fallback if missing.
-        pass
+    bootstrap_style = getattr(root, "style", None)
 
-    root.configure(background=DARK_PALETTE["canvas"])
-    style.configure(
-        ".",
-        background=DARK_PALETTE["canvas"],
-        foreground=DARK_PALETTE["text"],
-    )
-    style.configure("TFrame", background=DARK_PALETTE["canvas"])
-    style.configure(
-        "TLabel", background=DARK_PALETTE["canvas"], foreground=DARK_PALETTE["text"]
-    )
-    style.configure("TNotebook", background=DARK_PALETTE["canvas"], borderwidth=0)
-    style.configure(
-        "Dashboard.TNotebook",
-        background=DARK_PALETTE["canvas"],
-        borderwidth=0,
-        tabmargins=(0, 12, 0, 0),
-    )
-    style.configure(
-        "TNotebook.Tab",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text_muted"],
-        padding=(16, 10),
-    )
-    style.map(
-        "TNotebook.Tab",
-        background=[
-            ("selected", DARK_PALETTE["surface_alt"]),
-            ("active", DARK_PALETTE["surface_muted"]),
-        ],
-        foreground=[
-            ("selected", DARK_PALETTE["text"]),
-            ("active", DARK_PALETTE["text"]),
-        ],
-    )
-    style.configure(
-        "DashboardBackground.TFrame",
-        background=DARK_PALETTE["canvas"],
-    )
-    style.configure(
-        "AppContainer.TFrame",
-        background=DARK_PALETTE["canvas"],
-    )
-    style.configure(
-        "Header.TLabel",
-        background=DARK_PALETTE["canvas"],
-        foreground=DARK_PALETTE["text"],
-        font=("Segoe UI", 20, "bold"),
-    )
-    style.configure(
-        "SubHeader.TLabel",
-        background=DARK_PALETTE["canvas"],
-        foreground=DARK_PALETTE["text_muted"],
-        font=("Segoe UI", 12),
-    )
-    style.configure(
-        "Step.TLabel",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["accent_alt"],
-        font=("Segoe UI", 11),
-    )
-    style.configure(
-        "Body.TLabel",
-        background=DARK_PALETTE["canvas"],
-        foreground=DARK_PALETTE["text"],
-        font=("Segoe UI", 10),
-    )
-    style.configure(
-        "Surface.TLabel",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text"],
-        font=("Segoe UI", 10),
-    )
-    style.configure(
-        "Muted.TLabel",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text_muted"],
-        font=("Segoe UI", 10),
-    )
-    style.configure(
-        "StatusInfo.TLabel",
-        background=DARK_PALETTE["canvas"],
-        foreground=DARK_PALETTE["accent_alt"],
-        font=("Segoe UI", 10, "bold"),
-    )
-    style.configure(
-        "SurfaceStatus.TLabel",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["accent_alt"],
-        font=("Segoe UI", 10, "bold"),
-    )
-    style.configure(
-        "GuardBadge.TLabel",
-        background=DARK_PALETTE["surface_alt"],
-        foreground=DARK_PALETTE["accent_alt"],
-        font=("Segoe UI", 10, "bold"),
-        padding=(12, 4),
-    )
-    style.configure(
-        "Guidance.TLabelframe",
-        background=DARK_PALETTE["surface"],
-        bordercolor=DARK_PALETTE["border"],
-        relief="solid",
-        borderwidth=1,
-        padding=(12, 10),
-    )
-    style.configure(
-        "Guidance.TLabelframe.Label",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text"],
-        font=("Segoe UI", 11, "bold"),
-    )
-    style.configure(
-        "Section.TLabelframe",
-        background=DARK_PALETTE["surface"],
-        bordercolor=DARK_PALETTE["border"],
-        relief="solid",
-        borderwidth=1,
-        padding=(16, 12),
-    )
-    style.configure(
-        "Section.TLabelframe.Label",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["accent_alt"],
-        font=("Segoe UI", 11, "bold"),
-    )
-    style.configure(
-        "DashboardCard.TFrame",
-        background=DARK_PALETTE["surface"],
-        bordercolor=DARK_PALETTE["border"],
-        relief="solid",
-        borderwidth=1,
-        padding=(18, 16),
-    )
-    style.configure(
-        "ChartContainer.TFrame",
-        background=DARK_PALETTE["surface"],
-        bordercolor=DARK_PALETTE["border_muted"],
-        relief="solid",
-        borderwidth=1,
-        padding=(18, 16),
-    )
-    style.configure(
-        "CardHeading.TLabel",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text_muted"],
-        font=("Segoe UI", 11, "bold"),
-    )
-    style.configure(
-        "MetricValue.TLabel",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["accent"],
-        font=("Segoe UI", 22, "bold"),
-    )
-    style.configure(
-        "MetricCaption.TLabel",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text_muted"],
-        font=("Segoe UI", 10),
-    )
-    style.configure(
-        "Accent.TButton",
-        background=DARK_PALETTE["accent"],
-        foreground=DARK_PALETTE["canvas"],
-        bordercolor=DARK_PALETTE["accent"],
-        focusthickness=3,
-        focuscolor=DARK_PALETTE["accent_alt"],
-        padding=(16, 10),
-    )
-    style.configure(
-        "Neutral.TButton",
-        background=DARK_PALETTE["surface_alt"],
-        foreground=DARK_PALETTE["text"],
-        bordercolor=DARK_PALETTE["border"],
-        focusthickness=3,
-        focuscolor=DARK_PALETTE["accent_alt"],
-        padding=(14, 10),
-    )
-    style.map(
-        "Accent.TButton",
-        background=[
-            ("pressed", DARK_PALETTE["accent_active"]),
-            ("active", DARK_PALETTE["accent_hover"]),
-            ("disabled", DARK_PALETTE["border_muted"]),
-        ],
-        foreground=[
-            ("disabled", DARK_PALETTE["text_muted"]),
-            ("pressed", DARK_PALETTE["canvas"]),
-            ("active", DARK_PALETTE["canvas"]),
-        ],
-    )
-    style.map(
-        "Neutral.TButton",
-        background=[
-            ("pressed", DARK_PALETTE["surface_muted"]),
-            ("active", DARK_PALETTE["surface_alt"]),
-            ("disabled", DARK_PALETTE["border_muted"]),
-        ],
-        foreground=[
-            ("disabled", DARK_PALETTE["text_muted"]),
-        ],
-    )
-    style.configure(
-        "Input.TEntry",
-        fieldbackground=DARK_PALETTE["surface_alt"],
-        foreground=DARK_PALETTE["text"],
-        bordercolor=DARK_PALETTE["border"],
-        insertcolor=DARK_PALETTE["text"],
-    )
-    style.map(
-        "Input.TEntry",
-        fieldbackground=[
-            ("readonly", DARK_PALETTE["surface"]),
-            ("disabled", DARK_PALETTE["border_muted"]),
-        ],
-        foreground=[
-            ("disabled", DARK_PALETTE["text_muted"]),
-        ],
-    )
-    style.configure(
-        "Input.TCombobox",
-        fieldbackground=DARK_PALETTE["surface_alt"],
-        background=DARK_PALETTE["surface_alt"],
-        foreground=DARK_PALETTE["text"],
-        bordercolor=DARK_PALETTE["border"],
-    )
-    style.map(
-        "Input.TCombobox",
-        fieldbackground=[
-            ("readonly", DARK_PALETTE["surface_alt"]),
-            ("disabled", DARK_PALETTE["border_muted"]),
-        ],
-        foreground=[
-            ("disabled", DARK_PALETTE["text_muted"]),
-        ],
-    )
-    style.configure(
-        "Input.TSpinbox",
-        fieldbackground=DARK_PALETTE["surface_alt"],
-        foreground=DARK_PALETTE["text"],
-        bordercolor=DARK_PALETTE["border"],
-    )
-    style.map(
-        "Input.TSpinbox",
-        fieldbackground=[
-            ("disabled", DARK_PALETTE["border_muted"]),
-        ],
-        foreground=[
-            ("disabled", DARK_PALETTE["text_muted"]),
-        ],
-    )
-    style.configure(
-        "Input.TRadiobutton",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text"],
-    )
-    style.map(
-        "Input.TRadiobutton",
-        foreground=[
-            ("disabled", DARK_PALETTE["text_muted"]),
-        ],
-    )
-    style.configure(
-        "Input.TCheckbutton",
-        background=DARK_PALETTE["surface"],
-        foreground=DARK_PALETTE["text"],
-    )
-    style.map(
-        "Input.TCheckbutton",
-        foreground=[
-            ("disabled", DARK_PALETTE["text_muted"]),
-        ],
-    )
-    style.configure(
-        "Accent.Horizontal.TProgressbar",
-        background=DARK_PALETTE["accent"],
-        troughcolor=DARK_PALETTE["surface"],
-        bordercolor=DARK_PALETTE["border"],
-    )
+    if bootstrap_style is not None:
+        style = bootstrap_style
+        accent_bootstyle = _resolve_bootstrap_accent(accent_value)
+        style.configure("Dashboard.TNotebook", tabmargins=(0, 12, 0, 0))
+        style.configure("Header.TLabel", font=("Segoe UI", 20, "bold"))
+        style.configure("SubHeader.TLabel", font=("Segoe UI", 12))
+        style.configure("Step.TLabel", font=("Segoe UI", 11), bootstyle=accent_bootstyle)
+        style.configure("Body.TLabel", font=("Segoe UI", 10))
+        style.configure("Surface.TLabel", font=("Segoe UI", 10))
+        style.configure("Muted.TLabel", font=("Segoe UI", 10))
+        style.configure("StatusInfo.TLabel", font=("Segoe UI", 10, "bold"), bootstyle=accent_bootstyle)
+        style.configure("SurfaceStatus.TLabel", font=("Segoe UI", 10, "bold"))
+        style.configure("Danger.TLabel", font=("Segoe UI", 10, "bold"), bootstyle="danger")
+        style.configure("Warning.TLabel", font=("Segoe UI", 10, "bold"), bootstyle="warning")
+        style.configure("Success.TLabel", font=("Segoe UI", 10, "bold"), bootstyle="success")
+        style.configure("GuardBadge.TLabel", font=("Segoe UI", 10, "bold"), bootstyle=accent_bootstyle)
+        style.configure("Guidance.TLabelframe", padding=(12, 10))
+        style.configure("Guidance.TLabelframe.Label", font=("Segoe UI", 11, "bold"))
+        style.configure("Section.TLabelframe", padding=(16, 12))
+        style.configure("Section.TLabelframe.Label", font=("Segoe UI", 11, "bold"))
+        style.configure("DashboardCard.TFrame", padding=(18, 16))
+        style.configure("ChartContainer.TFrame", padding=(18, 16))
+        style.configure("CardHeading.TLabel", font=("Segoe UI", 11, "bold"))
+        style.configure("MetricValue.TLabel", font=("Segoe UI", 22, "bold"))
+        style.configure("MetricCaption.TLabel", font=("Segoe UI", 10))
+        style.configure("Accent.TButton", bootstyle=accent_bootstyle)
+        style.configure("Neutral.TButton", bootstyle="secondary")
+        style.configure("Accent.Horizontal.TProgressbar", bootstyle=accent_bootstyle)
+    else:
+        style = ttk.Style()
+        try:
+            style.theme_use("clam")
+        except tk.TclError:
+            # ``clam`` is widely available, but gracefully fallback if missing.
+            pass
 
-    root.option_add("*TCombobox*Listbox.background", DARK_PALETTE["surface"])
-    root.option_add("*TCombobox*Listbox.foreground", DARK_PALETTE["text"])
-    root.option_add("*TCombobox*Listbox.selectBackground", DARK_PALETTE["accent"])
-    root.option_add("*TCombobox*Listbox.selectForeground", DARK_PALETTE["canvas"])
+        root.configure(background=DARK_PALETTE["canvas"])
+        style.configure(
+            ".",
+            background=DARK_PALETTE["canvas"],
+            foreground=DARK_PALETTE["text"],
+        )
+        style.configure("TFrame", background=DARK_PALETTE["canvas"])
+        style.configure(
+            "TLabel", background=DARK_PALETTE["canvas"], foreground=DARK_PALETTE["text"]
+        )
+        style.configure("TNotebook", background=DARK_PALETTE["canvas"], borderwidth=0)
+        style.configure(
+            "Dashboard.TNotebook",
+            background=DARK_PALETTE["canvas"],
+            borderwidth=0,
+            tabmargins=(0, 12, 0, 0),
+        )
+        style.configure(
+            "TNotebook.Tab",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text_muted"],
+            padding=(16, 10),
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[
+                ("selected", DARK_PALETTE["surface_alt"]),
+                ("active", DARK_PALETTE["surface_muted"]),
+            ],
+            foreground=[
+                ("selected", DARK_PALETTE["text"]),
+                ("active", DARK_PALETTE["text"]),
+            ],
+        )
+        style.configure(
+            "DashboardBackground.TFrame",
+            background=DARK_PALETTE["canvas"],
+        )
+        style.configure(
+            "AppContainer.TFrame",
+            background=DARK_PALETTE["canvas"],
+        )
+        style.configure(
+            "Header.TLabel",
+            background=DARK_PALETTE["canvas"],
+            foreground=DARK_PALETTE["text"],
+            font=("Segoe UI", 20, "bold"),
+        )
+        style.configure(
+            "SubHeader.TLabel",
+            background=DARK_PALETTE["canvas"],
+            foreground=DARK_PALETTE["text_muted"],
+            font=("Segoe UI", 12),
+        )
+        style.configure(
+            "Step.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["accent_alt"],
+            font=("Segoe UI", 11),
+        )
+        style.configure(
+            "Body.TLabel",
+            background=DARK_PALETTE["canvas"],
+            foreground=DARK_PALETTE["text"],
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "Surface.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text"],
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "Muted.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text_muted"],
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "StatusInfo.TLabel",
+            background=DARK_PALETTE["canvas"],
+            foreground=DARK_PALETTE["accent_alt"],
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "SurfaceStatus.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["accent_alt"],
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "Danger.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["danger"],
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "Warning.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["warning"],
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "Success.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["success"],
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "GuardBadge.TLabel",
+            background=DARK_PALETTE["surface_alt"],
+            foreground=DARK_PALETTE["accent_alt"],
+            font=("Segoe UI", 10, "bold"),
+            padding=(12, 4),
+        )
+        style.configure(
+            "Guidance.TLabelframe",
+            background=DARK_PALETTE["surface"],
+            bordercolor=DARK_PALETTE["border"],
+            relief="solid",
+            borderwidth=1,
+            padding=(12, 10),
+        )
+        style.configure(
+            "Guidance.TLabelframe.Label",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text"],
+            font=("Segoe UI", 11, "bold"),
+        )
+        style.configure(
+            "Section.TLabelframe",
+            background=DARK_PALETTE["surface"],
+            bordercolor=DARK_PALETTE["border"],
+            relief="solid",
+            borderwidth=1,
+            padding=(16, 12),
+        )
+        style.configure(
+            "Section.TLabelframe.Label",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["accent_alt"],
+            font=("Segoe UI", 11, "bold"),
+        )
+        style.configure(
+            "DashboardCard.TFrame",
+            background=DARK_PALETTE["surface"],
+            bordercolor=DARK_PALETTE["border"],
+            relief="solid",
+            borderwidth=1,
+            padding=(18, 16),
+        )
+        style.configure(
+            "ChartContainer.TFrame",
+            background=DARK_PALETTE["surface"],
+            bordercolor=DARK_PALETTE["border_muted"],
+            relief="solid",
+            borderwidth=1,
+            padding=(18, 16),
+        )
+        style.configure(
+            "CardHeading.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text_muted"],
+            font=("Segoe UI", 11, "bold"),
+        )
+        style.configure(
+            "MetricValue.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["accent"],
+            font=("Segoe UI", 22, "bold"),
+        )
+        style.configure(
+            "MetricCaption.TLabel",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text_muted"],
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "Accent.TButton",
+            background=DARK_PALETTE["accent"],
+            foreground=DARK_PALETTE["canvas"],
+            bordercolor=DARK_PALETTE["accent"],
+            focusthickness=3,
+            focuscolor=DARK_PALETTE["accent_alt"],
+            padding=(16, 10),
+        )
+        style.configure(
+            "Neutral.TButton",
+            background=DARK_PALETTE["surface_alt"],
+            foreground=DARK_PALETTE["text"],
+            bordercolor=DARK_PALETTE["border"],
+            focusthickness=3,
+            focuscolor=DARK_PALETTE["accent_alt"],
+            padding=(14, 10),
+        )
+        style.map(
+            "Accent.TButton",
+            background=[
+                ("pressed", DARK_PALETTE["accent_active"]),
+                ("active", DARK_PALETTE["accent_hover"]),
+                ("disabled", DARK_PALETTE["border_muted"]),
+            ],
+            foreground=[
+                ("disabled", DARK_PALETTE["text_muted"]),
+                ("pressed", DARK_PALETTE["canvas"]),
+                ("active", DARK_PALETTE["canvas"]),
+            ],
+        )
+        style.map(
+            "Neutral.TButton",
+            background=[
+                ("pressed", DARK_PALETTE["surface_muted"]),
+                ("active", DARK_PALETTE["surface_alt"]),
+                ("disabled", DARK_PALETTE["border_muted"]),
+            ],
+            foreground=[
+                ("disabled", DARK_PALETTE["text_muted"]),
+            ],
+        )
+        style.configure(
+            "Input.TEntry",
+            fieldbackground=DARK_PALETTE["surface_alt"],
+            foreground=DARK_PALETTE["text"],
+            bordercolor=DARK_PALETTE["border"],
+            insertcolor=DARK_PALETTE["text"],
+        )
+        style.map(
+            "Input.TEntry",
+            fieldbackground=[
+                ("readonly", DARK_PALETTE["surface"]),
+                ("disabled", DARK_PALETTE["border_muted"]),
+            ],
+            foreground=[
+                ("disabled", DARK_PALETTE["text_muted"]),
+            ],
+        )
+        style.configure(
+            "Input.TCombobox",
+            fieldbackground=DARK_PALETTE["surface_alt"],
+            background=DARK_PALETTE["surface_alt"],
+            foreground=DARK_PALETTE["text"],
+            bordercolor=DARK_PALETTE["border"],
+        )
+        style.map(
+            "Input.TCombobox",
+            fieldbackground=[
+                ("readonly", DARK_PALETTE["surface_alt"]),
+                ("disabled", DARK_PALETTE["border_muted"]),
+            ],
+            foreground=[
+                ("disabled", DARK_PALETTE["text_muted"]),
+            ],
+        )
+        style.configure(
+            "Input.TSpinbox",
+            fieldbackground=DARK_PALETTE["surface_alt"],
+            foreground=DARK_PALETTE["text"],
+            bordercolor=DARK_PALETTE["border"],
+        )
+        style.map(
+            "Input.TSpinbox",
+            fieldbackground=[
+                ("disabled", DARK_PALETTE["border_muted"]),
+            ],
+            foreground=[
+                ("disabled", DARK_PALETTE["text_muted"]),
+            ],
+        )
+        style.configure(
+            "Input.TRadiobutton",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text"],
+        )
+        style.map(
+            "Input.TRadiobutton",
+            foreground=[
+                ("disabled", DARK_PALETTE["text_muted"]),
+            ],
+        )
+        style.configure(
+            "Input.TCheckbutton",
+            background=DARK_PALETTE["surface"],
+            foreground=DARK_PALETTE["text"],
+        )
+        style.map(
+            "Input.TCheckbutton",
+            foreground=[
+                ("disabled", DARK_PALETTE["text_muted"]),
+            ],
+        )
+        style.configure(
+            "Accent.Horizontal.TProgressbar",
+            background=DARK_PALETTE["accent"],
+            troughcolor=DARK_PALETTE["surface"],
+            bordercolor=DARK_PALETTE["border"],
+        )
+
+        root.option_add("*TCombobox*Listbox.background", DARK_PALETTE["surface"])
+        root.option_add("*TCombobox*Listbox.foreground", DARK_PALETTE["text"])
+        root.option_add("*TCombobox*Listbox.selectBackground", DARK_PALETTE["accent"])
+        root.option_add("*TCombobox*Listbox.selectForeground", DARK_PALETTE["canvas"])
 
     container = ttk.Frame(root, padding=16, style="AppContainer.TFrame")
     container.pack(fill=tk.BOTH, expand=True)

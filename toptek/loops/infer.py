@@ -98,7 +98,11 @@ class PredictionService:
             "SELECT ts FROM model_predictions WHERE symbol = ? ORDER BY ts", (symbol,)
         )
         rows = cursor.fetchall()
-        return {str(row[0]) for row in rows if row[0] is not None}
+        return {
+            pd.Timestamp(row[0]).isoformat()
+            for row in rows
+            if row[0] is not None
+        }
 
     def close(self) -> None:
         if self._owns_connection:
@@ -147,20 +151,26 @@ class PredictionService:
         if features_df.empty:
             return []
         known = self._known_predictions.setdefault(symbol, set())
-        candidate_mask = ~features_df.index.astype(str).isin(known)
+        index_iso = features_df.index.map(pd.Timestamp.isoformat)
+        candidate_mask = ~pd.Index(index_iso).isin(known)
         candidates = features_df.loc[candidate_mask]
         if candidates.empty:
             return []
         matrix = candidates[self.feature_names].to_numpy(dtype=np.float64)
         probabilities = self.calibrator.predict_proba(matrix)[:, 1]
         inserted: List[Dict[str, object]] = []
-        for ts, prob_up in zip(candidates.index, probabilities):
+        candidate_isos = pd.Index(index_iso)[candidate_mask]
+        for ts, ts_iso, prob_up in zip(candidates.index, candidate_isos, probabilities):
             record = self._persist_prediction(symbol, ts, float(prob_up))
-            known.add(ts.isoformat())
+            if record is None:
+                continue
+            known.add(ts_iso)
             inserted.append(record)
         return inserted
 
-    def _persist_prediction(self, symbol: str, ts: pd.Timestamp, prob_up: float) -> Dict[str, object]:
+    def _persist_prediction(
+        self, symbol: str, ts: pd.Timestamp, prob_up: float
+    ) -> Dict[str, object] | None:
         prob_down = float(max(0.0, min(1.0, 1.0 - prob_up)))
         threshold = self.config.decision_threshold
         chosen = int(prob_up >= threshold)
@@ -177,7 +187,7 @@ class PredictionService:
             "chosen": chosen,
             "meta": json.dumps({"source": "infer"}),
         }
-        self.conn.execute(
+        cursor = self.conn.execute(
             (
                 "INSERT OR IGNORE INTO model_predictions(" \
                 "pred_id, ts, symbol, prob_up, prob_down, model_ver, features_hash, decision_threshold, chosen, meta) "
@@ -185,7 +195,9 @@ class PredictionService:
             ),
             payload,
         )
-        return payload
+        if cursor.rowcount and cursor.rowcount > 0:
+            return payload
+        return None
 
     def _build_feature_frame(self, bars: pd.DataFrame) -> pd.DataFrame:
         feature_map = core_features.compute_features(bars)

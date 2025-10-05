@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -167,20 +168,48 @@ class TestClient:
     def __exit__(self, exc_type, exc, tb) -> None:
         asyncio.run(self._app._exit_lifespan())
 
-    def get(self, path: str) -> _ClientResponse:
+    def get(
+        self, path: str, headers: Optional[Dict[str, str]] = None
+    ) -> _ClientResponse:
         handler = self._app.get_route("GET", path)
-        result = asyncio.run(cast(Coroutine[Any, Any, Any], handler()))
+        result = asyncio.run(
+            cast(Coroutine[Any, Any, Any], _invoke_handler(handler, [], headers))
+        )
         return _ClientResponse(result)
 
     def post(
-        self, path: str, json: Optional[Dict[str, Any]] = None, stream: bool = False
+        self,
+        path: str,
+        json: Optional[Dict[str, Any]] = None,
+        stream: bool = False,
+        headers: Optional[Dict[str, str]] = None,
     ) -> _ClientResponse:
         handler = self._app.get_route("POST", path)
-        if json is None:
-            payload = asyncio.run(cast(Coroutine[Any, Any, Any], handler()))
-        else:
-            payload = asyncio.run(cast(Coroutine[Any, Any, Any], handler(json)))
+        args: list[Any] = []
+        if json is not None:
+            args.append(json)
+        payload = asyncio.run(
+            cast(Coroutine[Any, Any, Any], _invoke_handler(handler, args, headers))
+        )
         return _ClientResponse(payload)
+
+
+def _invoke_handler(
+    handler: Callable[..., Awaitable[Any]],
+    args: list[Any],
+    headers: Optional[Dict[str, str]],
+) -> Awaitable[Any]:
+    signature = inspect.signature(handler)
+    params = list(signature.parameters.values())
+    call_args = list(args)
+    if len(call_args) < len(params):
+        next_param = params[len(call_args)]
+        if next_param.kind in (
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        ) and next_param.name == "request":
+            call_args.append(SimpleNamespace(headers=headers or {}))
+    return handler(*call_args)
 
 
 __all__ = [

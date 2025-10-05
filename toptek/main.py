@@ -10,6 +10,7 @@ from typing import Any, Dict, Tuple, TYPE_CHECKING, cast
 
 from dotenv import load_dotenv
 
+from toptek.api import load_gateway_settings
 from toptek.core import utils
 
 if TYPE_CHECKING:  # pragma: no cover - hints only
@@ -269,6 +270,7 @@ def main() -> None:
     _guard_interpreter_version()
     utils.assert_numeric_stack()
     load_dotenv(ROOT / ".env")
+    load_gateway_settings()
     configs, ui_settings = load_configs()
     paths = utils.build_paths(ROOT, configs["app"])
     utils.ensure_directories(paths)

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, MutableMapping, Optional, Sequence
+from typing import Any, Callable, Dict, MutableMapping, Optional, Sequence, TYPE_CHECKING
 
-from .gateway import ProjectXGateway
+if TYPE_CHECKING:  # pragma: no cover - typing aid only
+    from .gateway import ProjectXGateway
 
 
 _STREAMING_IMPORT_MESSAGE = (
@@ -18,7 +19,7 @@ _STREAMING_IMPORT_MESSAGE = (
 class ExecutionContext:
     """Represents the state required for placing orders."""
 
-    gateway: ProjectXGateway
+    gateway: "ProjectXGateway"
     account_id: str
 
 

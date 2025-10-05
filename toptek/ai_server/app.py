@@ -7,7 +7,7 @@ import logging
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, TYPE_CHECKING
 
 try:  # pragma: no cover - prefer the real FastAPI implementation when available
     from fastapi import FastAPI, HTTPException
@@ -29,6 +29,8 @@ try:  # pragma: no cover - prefer real pydantic when available
     from pydantic import BaseModel, Field, root_validator
 except ModuleNotFoundError:  # pragma: no cover
     from ._pydantic_stub import BaseModel, Field, root_validator
+
+from toptek.api import load_gateway_settings, register_gateway_routes
 
 from .config import AISettings, load_settings
 from .lmstudio import LMStudioClient
@@ -125,6 +127,10 @@ class MetricsPayload(BaseModel):
     pnl: List[float]
 
 
+if TYPE_CHECKING:  # pragma: no cover - imports for typing only
+    from toptek.core.gateway import ProjectXGateway
+
+
 class AppState:
     def __init__(
         self,
@@ -132,12 +138,14 @@ class AppState:
         client: LMStudioClient,
         process: LMStudioProcessManager,
         router: ModelRouter,
+        gateway: "ProjectXGateway",
     ) -> None:
         self.settings = settings
         self.client = client
         self.process = process
         self.router = router
         self.startup_error: Optional[str] = None
+        self.gateway = gateway
 
 
 @lru_cache(maxsize=1)
@@ -205,7 +213,16 @@ def create_app(
     if process is None:
         process = LMStudioProcessManager(settings, client)
 
-    state = AppState(settings, client, process, router)
+    gateway_settings = load_gateway_settings()
+    from toptek.core.gateway import ProjectXGateway
+
+    gateway = ProjectXGateway(
+        gateway_settings.base_url,
+        gateway_settings.username,
+        gateway_settings.api_key,
+    )
+
+    state = AppState(settings, client, process, router, gateway)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -223,8 +240,15 @@ def create_app(
         yield
         process.terminate()
         await client.close()
+        state.gateway.close()
 
     app = FastAPI(title="Toptek Auto AI Server", lifespan=lifespan)
+
+    register_gateway_routes(
+        app,
+        gateway_settings=gateway_settings,
+        gateway=gateway,
+    )
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> HTMLResponse:

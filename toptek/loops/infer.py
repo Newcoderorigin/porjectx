@@ -99,7 +99,7 @@ class PredictionService:
         )
         rows = cursor.fetchall()
         return {
-            pd.Timestamp(row[0])
+            pd.Timestamp(row[0]).isoformat()
             for row in rows
             if row[0] is not None
         }
@@ -151,18 +151,20 @@ class PredictionService:
         if features_df.empty:
             return []
         known = self._known_predictions.setdefault(symbol, set())
-        candidate_mask = ~features_df.index.isin(known)
+        index_iso = features_df.index.map(pd.Timestamp.isoformat)
+        candidate_mask = ~pd.Index(index_iso).isin(known)
         candidates = features_df.loc[candidate_mask]
         if candidates.empty:
             return []
         matrix = candidates[self.feature_names].to_numpy(dtype=np.float64)
         probabilities = self.calibrator.predict_proba(matrix)[:, 1]
         inserted: List[Dict[str, object]] = []
-        for ts, prob_up in zip(candidates.index, probabilities):
+        candidate_isos = pd.Index(index_iso)[candidate_mask]
+        for ts, ts_iso, prob_up in zip(candidates.index, candidate_isos, probabilities):
             record = self._persist_prediction(symbol, ts, float(prob_up))
             if record is None:
                 continue
-            known.add(ts)
+            known.add(ts_iso)
             inserted.append(record)
         return inserted
 

@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 tk = pytest.importorskip("tkinter")
+pytest.importorskip("pandas")
 from tkinter import ttk  # noqa: E402
 
 from toptek.ui.live_tab import LiveTab  # noqa: E402

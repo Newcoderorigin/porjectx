@@ -22,6 +22,7 @@ from toptek.risk import GuardReport, RiskEngine
 from toptek.replay import ReplayBar, ReplaySimulator
 
 from . import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
+from .builder import invoke_tab_builder
 
 
 T = TypeVar("T")
@@ -212,7 +213,7 @@ class DashboardTab(BaseTab):
         self.training_caption = tk.StringVar()
         self.chart_summary = tk.StringVar()
         super().__init__(master, configs, paths)
-        self._build()
+        invoke_tab_builder(self)
         self._refresh_metrics()
 
     def _build(self) -> None:
@@ -372,7 +373,7 @@ class LoginTab(BaseTab):
         paths: utils.AppPaths,
     ) -> None:
         super().__init__(master, configs, paths)
-        self._build()
+        invoke_tab_builder(self)
 
     def _build(self) -> None:
         intro = ttk.LabelFrame(
@@ -477,7 +478,7 @@ class ResearchTab(BaseTab):
         paths: utils.AppPaths,
     ) -> None:
         super().__init__(master, configs, paths)
-        self._build()
+        invoke_tab_builder(self)
 
     def _build(self) -> None:
         controls = ttk.LabelFrame(
@@ -607,7 +608,7 @@ class TrainTab(BaseTab):
         paths: utils.AppPaths,
     ) -> None:
         super().__init__(master, configs, paths)
-        self._build()
+        invoke_tab_builder(self)
 
     def _build(self) -> None:
         config = ttk.LabelFrame(
@@ -850,7 +851,7 @@ class BacktestTab(BaseTab):
         paths: utils.AppPaths,
     ) -> None:
         super().__init__(master, configs, paths)
-        self._build()
+        invoke_tab_builder(self)
 
     def _build(self) -> None:
         controls = ttk.LabelFrame(
@@ -990,7 +991,7 @@ class ReplayTab(BaseTab):
         self._poll_interval = max(
             16, int(1000 / int(self.ui_setting("chart", "fps", default=12)))
         )
-        self._build()
+        invoke_tab_builder(self)
 
     def destroy(self) -> None:
         self._cancel_poll()
@@ -1356,7 +1357,7 @@ class TradeTab(BaseTab):
         self._panic_bound = False
         self.update_section("trade", {"mode": initial_mode})
         self._bind_panic()
-        self._build()
+        invoke_tab_builder(self)
 
     def destroy(self) -> None:  # pragma: no cover - Tk handles lifecycle in UI
         self._unbind_panic()

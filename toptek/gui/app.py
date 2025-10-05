@@ -9,6 +9,7 @@ from typing import Callable, Dict, List
 from core import utils
 
 from . import DARK_PALETTE
+from .builder import MissingTabBuilderError, build_missing_tab_placeholder
 
 
 class ToptekApp(ttk.Notebook):
@@ -29,6 +30,7 @@ class ToptekApp(ttk.Notebook):
         self._tab_names: List[str] = []
         self._tab_guidance: Dict[str, str] = {}
         self._tab_widgets: Dict[str, ttk.Frame] = {}
+        self.logger = utils.build_logger(self.__class__.__name__)
         self._build_tabs()
         self.bind("<<NotebookTabChanged>>", self._handle_tab_change)
 
@@ -108,7 +110,15 @@ class ToptekApp(ttk.Notebook):
                 )
 
         for name, factory, guidance in tabs:
-            frame = factory(self)
+            try:
+                frame = factory(self)
+            except MissingTabBuilderError as error:
+                self.logger.error(
+                    "Failed to build %s tab", name, exc_info=error
+                )
+                frame = build_missing_tab_placeholder(
+                    self, tab_name=name, error=error
+                )
             self.add(frame, text=name)
             self._tab_names.append(name)
             self._tab_guidance[name] = guidance

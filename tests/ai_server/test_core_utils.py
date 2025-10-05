@@ -72,10 +72,10 @@ def test_assert_numeric_stack_pass(monkeypatch):
 
     def fake_version(name: str) -> str:
         recorded[name] = True
-        return "1.3.2" if name == "scikit-learn" else "1.9.0"
+        return "1.6.0" if name == "scikit-learn" else "2.1.2"
 
     monkeypatch.setattr(utils.metadata, "version", fake_version)
-    utils.assert_numeric_stack({"scikit-learn": "==1.3.2", "numpy": ">=1.0"})
+    utils.assert_numeric_stack({"scikit-learn": "==1.6.0", "numpy": ">=2.0"})
     assert recorded["scikit-learn"] is True
 
 

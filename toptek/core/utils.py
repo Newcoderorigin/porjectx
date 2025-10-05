@@ -125,9 +125,9 @@ def build_paths(root: Path, app_config: Dict[str, Any]) -> AppPaths:
 
 
 STACK_REQUIREMENTS: Dict[str, str | tuple[str, str]] = {
-    "numpy": ">=1.21.6,<1.28",
-    "scipy": ">=1.7.3,<1.12",
-    "scikit-learn": "==1.3.2",
+    "numpy": ">=2.1.2,<2.3",
+    "scipy": ">=1.14.1,<1.16",
+    "scikit-learn": "==1.6.0",
 }
 
 

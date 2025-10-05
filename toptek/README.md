@@ -20,6 +20,22 @@ copy .env.example .env
 python main.py
 ```
 
+### Web console build steps
+
+The React-based markets console lives under `toptek/ui/web`. Build the production
+assets once before launching the Tkinter shell with the web tab enabled:
+
+```powershell
+cd toptek/ui/web
+npm install
+npm run build
+```
+
+Enable the packaged assets by setting `web_frontend.enabled: true` in
+`config/app.yml` or via the `.env` override. When the assets are present the GUI
+exposes an **Open Web Console** button that serves the bundle from an embedded
+HTTP server.
+
 ## CLI usage examples
 
 ```powershell

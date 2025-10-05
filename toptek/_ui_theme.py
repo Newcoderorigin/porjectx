@@ -43,7 +43,7 @@ def _patch_bootstrap_keywords() -> None:
         return
 
     Keywords.TYPE_PATTERN = re.compile(
-        r"outline|link|inverse|(?<!back)round|square|striped|focus|input|date|metersubtxt|meter|table"
+        "outline|link|inverse|\\bround\\b|square|striped|focus|input|date|metersubtxt|meter|table"
     )
     Keywords._toptek_background_patch = True
 

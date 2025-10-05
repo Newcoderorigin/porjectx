@@ -1212,10 +1212,11 @@ class TradingViewTab(BaseTab):
 
         frame = ttk.LabelFrame(
             self,
+            name="tradingview_launchpad",
             text="TradingView launchpad",
             style="Section.TLabelframe",
         )
-        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(12, 12))
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(12, 12))
 
         if not self.tv_router or not self.tv_router.enabled:
             ttk.Label(
@@ -1230,63 +1231,99 @@ class TradingViewTab(BaseTab):
             ).pack(anchor=tk.W, pady=6)
             return
 
-        control_grid = ttk.Frame(frame, style="DashboardBackground.TFrame")
-        control_grid.pack(fill=tk.X, pady=(6, 12))
-        ttk.Label(control_grid, text="Symbol", style="Surface.TLabel").grid(
-            row=0, column=0, sticky=tk.W, pady=(0, 6)
+        section_padx = 12
+        section_pady = (6, 12)
+        field_padx = (0, 12)
+        value_padx = (6, 0)
+        row_pady = (2, 6)
+
+        symbol_section = ttk.Frame(
+            frame,
+            name="symbol_section",
+            style="DashboardBackground.TFrame",
+        )
+        symbol_section.pack(fill=tk.X, padx=section_padx, pady=section_pady)
+        symbol_section.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(
+            symbol_section,
+            text="Symbol & Session",
+            style="Surface.TLabel",
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 4))
+        ttk.Label(symbol_section, text="Symbol", style="Surface.TLabel").grid(
+            row=1, column=0, sticky=tk.W, padx=field_padx, pady=row_pady
         )
         ttk.Entry(
-            control_grid,
+            symbol_section,
             textvariable=self.symbol_var,
-            width=16,
+            width=18,
             style="Input.TEntry",
-        ).grid(row=0, column=1, sticky=tk.W, pady=(0, 6), padx=(6, 12))
+        ).grid(row=1, column=1, sticky=tk.EW, padx=value_padx, pady=row_pady)
 
-        ttk.Label(control_grid, text="Interval", style="Surface.TLabel").grid(
-            row=0, column=2, sticky=tk.W, pady=(0, 6)
+        ttk.Label(symbol_section, text="Interval", style="Surface.TLabel").grid(
+            row=2, column=0, sticky=tk.W, padx=field_padx, pady=row_pady
         )
         ttk.Entry(
-            control_grid,
+            symbol_section,
             textvariable=self.interval_var,
-            width=10,
+            width=12,
             style="Input.TEntry",
-        ).grid(row=0, column=3, sticky=tk.W, pady=(0, 6), padx=(6, 0))
+        ).grid(row=2, column=1, sticky=tk.W, padx=value_padx, pady=row_pady)
 
-        ttk.Label(control_grid, text="Theme", style="Surface.TLabel").grid(
-            row=1, column=0, sticky=tk.W
+        launch_section = ttk.Frame(
+            frame,
+            name="launch_section",
+            style="DashboardBackground.TFrame",
+        )
+        launch_section.pack(fill=tk.X, padx=section_padx, pady=section_pady)
+        launch_section.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(
+            launch_section,
+            text="Launch Options",
+            style="Surface.TLabel",
+        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=(0, 4))
+        ttk.Label(launch_section, text="Theme", style="Surface.TLabel").grid(
+            row=1, column=0, sticky=tk.W, padx=field_padx, pady=row_pady
         )
         ttk.Combobox(
-            control_grid,
+            launch_section,
             textvariable=self.theme_var,
             values=("dark", "light"),
             state="readonly",
             width=12,
             style="Input.TCombobox",
-        ).grid(row=1, column=1, sticky=tk.W, padx=(6, 12))
+        ).grid(row=1, column=1, sticky=tk.W, padx=value_padx, pady=row_pady)
 
-        ttk.Label(control_grid, text="Locale", style="Surface.TLabel").grid(
-            row=1, column=2, sticky=tk.W
+        ttk.Label(launch_section, text="Locale", style="Surface.TLabel").grid(
+            row=2, column=0, sticky=tk.W, padx=field_padx, pady=row_pady
         )
         ttk.Entry(
-            control_grid,
+            launch_section,
             textvariable=self.locale_var,
-            width=10,
+            width=14,
             style="Input.TEntry",
-        ).grid(row=1, column=3, sticky=tk.W, padx=(6, 0))
+        ).grid(row=2, column=1, sticky=tk.W, padx=value_padx, pady=row_pady)
 
         favourites = self.tv_router.favorites if self.tv_router else []
         if favourites:
             ttk.Label(
-                control_grid, text="Favorites", style="Surface.TLabel"
-            ).grid(row=2, column=0, sticky=tk.W, pady=(8, 0))
+                launch_section, text="Favorites", style="Surface.TLabel"
+            ).grid(row=3, column=0, sticky=tk.W, padx=field_padx, pady=(8, 2))
             fav_combo = ttk.Combobox(
-                control_grid,
+                launch_section,
                 values=[item["label"] for item in favourites],
                 state="readonly",
-                width=28,
+                width=30,
                 style="Input.TCombobox",
             )
-            fav_combo.grid(row=2, column=1, columnspan=3, sticky=tk.W, padx=(6, 0), pady=(8, 0))
+            fav_combo.grid(
+                row=3,
+                column=1,
+                sticky=tk.EW,
+                padx=value_padx,
+                pady=(8, 2),
+            )
 
             def _apply_favorite(_: tk.Event) -> None:
                 selection = fav_combo.current()
@@ -1299,11 +1336,11 @@ class TradingViewTab(BaseTab):
             fav_combo.bind("<<ComboboxSelected>>", _apply_favorite, add="+")
 
         ttk.Button(
-            frame,
+            launch_section,
             text="Launch TradingView (Ctrl+Shift+T)",
             style="Accent.TButton",
             command=self._open_tradingview_tab,
-        ).pack(anchor=tk.W, padx=4, pady=(6, 0))
+        ).grid(row=4, column=0, columnspan=2, sticky=tk.W, padx=field_padx, pady=(12, 0))
 
         ttk.Label(
             frame,
@@ -1357,102 +1394,175 @@ class TradingViewTab(BaseTab):
         super().destroy()
 
     def _build_ui(self) -> None:
+        outer_padx = 12
         controls = ttk.LabelFrame(
             self,
+            name="replay_controls",
             text="Step 5 · Replay",
             style="Section.TLabelframe",
         )
-        controls.pack(fill=tk.X, padx=10, pady=(12, 6))
+        controls.pack(fill=tk.X, padx=outer_padx, pady=(12, 6))
 
-        ttk.Label(controls, text="Dataset", style="Surface.TLabel").grid(
-            row=0, column=0, sticky=tk.W
+        group_padx = 12
+        group_pady = (8, 12)
+        label_padx = (0, 12)
+        value_padx = (6, 0)
+        row_pady = (4, 4)
+
+        dataset_group = ttk.LabelFrame(
+            controls,
+            name="dataset_group",
+            text="Dataset",
+            style="Section.TLabelframe",
+        )
+        dataset_group.pack(fill=tk.X, padx=group_padx, pady=group_pady)
+        dataset_group.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(dataset_group, text="Path", style="Surface.TLabel").grid(
+            row=0, column=0, sticky=tk.W, padx=label_padx, pady=row_pady
         )
         path_entry = ttk.Entry(
-            controls,
+            dataset_group,
             textvariable=self.file_var,
             width=46,
             style="Input.TEntry",
         )
-        path_entry.grid(row=0, column=1, columnspan=3, sticky=tk.EW, padx=(8, 8))
+        path_entry.grid(
+            row=0,
+            column=1,
+            sticky=tk.EW,
+            padx=value_padx,
+            pady=row_pady,
+        )
         ttk.Button(
-            controls,
+            dataset_group,
             text="Browse",
             style="Neutral.TButton",
             command=self._browse_dataset,
-        ).grid(row=0, column=4, padx=(0, 0))
+        ).grid(row=0, column=2, sticky=tk.W, padx=value_padx, pady=row_pady)
 
-        ttk.Label(controls, text="Format", style="Surface.TLabel").grid(
-            row=1, column=0, sticky=tk.W, pady=(8, 0)
+        ttk.Label(
+            dataset_group,
+            text="Supports CSV or Parquet recordings with auto-detected schema.",
+            style="MetricCaption.TLabel",
+        ).grid(row=1, column=0, columnspan=3, sticky=tk.W, padx=label_padx, pady=(2, 0))
+
+        playback_group = ttk.LabelFrame(
+            controls,
+            name="playback_group",
+            text="Playback Controls",
+            style="Section.TLabelframe",
+        )
+        playback_group.pack(fill=tk.X, padx=group_padx, pady=group_pady)
+        playback_group.grid_columnconfigure(1, weight=1)
+        playback_group.grid_columnconfigure(3, weight=1)
+
+        ttk.Label(playback_group, text="Format", style="Surface.TLabel").grid(
+            row=0, column=0, sticky=tk.W, padx=label_padx, pady=row_pady
         )
         format_combo = ttk.Combobox(
-            controls,
+            playback_group,
             textvariable=self.format_var,
             values=("auto", "csv", "parquet"),
             state="readonly",
             width=12,
             style="Input.TCombobox",
         )
-        format_combo.grid(row=1, column=1, sticky=tk.W, padx=(8, 12), pady=(8, 0))
+        format_combo.grid(
+            row=0, column=1, sticky=tk.W, padx=value_padx, pady=row_pady
+        )
 
-        ttk.Label(controls, text="Speed (×)", style="Surface.TLabel").grid(
-            row=1, column=2, sticky=tk.W, pady=(8, 0)
+        ttk.Label(playback_group, text="Speed (×)", style="Surface.TLabel").grid(
+            row=0, column=2, sticky=tk.W, padx=label_padx, pady=row_pady
         )
         speed_combo = ttk.Combobox(
-            controls,
+            playback_group,
             textvariable=self.speed_var,
             values=("0.25", "0.5", "1.0", "1.5", "2.0", "3.0", "4.0"),
             width=10,
             style="Input.TCombobox",
         )
-        speed_combo.grid(row=1, column=3, sticky=tk.W, pady=(8, 0))
+        speed_combo.grid(row=0, column=3, sticky=tk.W, padx=value_padx, pady=row_pady)
         speed_combo.bind("<<ComboboxSelected>>", self._set_speed)
         speed_combo.bind("<FocusOut>", self._set_speed)
         speed_combo.bind("<Return>", self._set_speed)
 
         ttk.Button(
-            controls, text="Start", style="Accent.TButton", command=self._start_replay
-        ).grid(row=1, column=4, padx=(12, 0), pady=(8, 0))
-
+            playback_group,
+            text="Start",
+            style="Accent.TButton",
+            command=self._start_replay,
+        ).grid(row=1, column=0, sticky=tk.W, padx=label_padx, pady=row_pady)
         ttk.Button(
-            controls,
+            playback_group,
             text="Pause",
             style="Neutral.TButton",
             command=self._pause_replay,
-        ).grid(row=2, column=1, sticky=tk.W, pady=(8, 0))
+        ).grid(row=1, column=1, sticky=tk.W, padx=value_padx, pady=row_pady)
         ttk.Button(
-            controls,
+            playback_group,
             text="Resume",
             style="Neutral.TButton",
             command=self._resume_replay,
-        ).grid(row=2, column=2, sticky=tk.W, pady=(8, 0))
+        ).grid(row=1, column=2, sticky=tk.W, padx=label_padx, pady=row_pady)
         ttk.Button(
-            controls,
+            playback_group,
             text="Stop",
             style="Neutral.TButton",
             command=self._stop_replay,
-        ).grid(row=2, column=3, sticky=tk.W, pady=(8, 0))
+        ).grid(row=1, column=3, sticky=tk.W, padx=value_padx, pady=row_pady)
 
-        ttk.Label(controls, text="Position", style="Surface.TLabel").grid(
-            row=3, column=0, sticky=tk.W, pady=(10, 0)
+        ttk.Label(playback_group, text="Position", style="Surface.TLabel").grid(
+            row=2, column=0, sticky=tk.W, padx=label_padx, pady=(8, 2)
         )
         self.seek_scale = ttk.Scale(
-            controls,
+            playback_group,
             from_=0,
             to=100,
             variable=self.seek_var,
         )
         self.seek_scale.grid(
-            row=3, column=1, columnspan=4, sticky=tk.EW, padx=(8, 0), pady=(10, 0)
+            row=2,
+            column=1,
+            columnspan=3,
+            sticky=tk.EW,
+            padx=value_padx,
+            pady=(8, 2),
         )
         self.seek_scale.bind("<ButtonPress-1>", self._on_seek_start)
         self.seek_scale.bind("<ButtonRelease-1>", self._on_seek_release)
 
-        controls.columnconfigure(1, weight=1)
-        controls.columnconfigure(2, weight=1)
-        controls.columnconfigure(3, weight=1)
+        ttk.Label(
+            playback_group,
+            text="Drag the scrubber to revisit key moments in the recording.",
+            style="MetricCaption.TLabel",
+        ).grid(row=3, column=0, columnspan=4, sticky=tk.W, padx=label_padx, pady=(2, 0))
+
+        status_group = ttk.LabelFrame(
+            controls,
+            name="status_group",
+            text="Status",
+            style="Section.TLabelframe",
+        )
+        status_group.pack(fill=tk.X, padx=group_padx, pady=group_pady)
+        status_group.grid_columnconfigure(0, weight=1)
+
+        ttk.Label(
+            status_group,
+            text="Current playback state and telemetry are summarized here.",
+            style="MetricCaption.TLabel",
+        ).grid(row=0, column=0, sticky=tk.W, padx=label_padx, pady=(0, 4))
+
+        self.status = ttk.Label(
+            status_group,
+            textvariable=self.status_var,
+            style="StatusInfo.TLabel",
+            anchor=tk.W,
+        )
+        self.status.grid(row=1, column=0, sticky=tk.EW, padx=label_padx, pady=row_pady)
 
         chart_container = ttk.Frame(self, style="DashboardBackground.TFrame")
-        chart_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=(6, 6))
+        chart_container.pack(fill=tk.BOTH, expand=True, padx=outer_padx, pady=(6, 6))
         self._chart = LiveChart(
             chart_container,
             max_points=int(self.ui_setting("chart", "max_points", default=180)),
@@ -1462,19 +1572,11 @@ class TradingViewTab(BaseTab):
 
         self.output = tk.Text(self, height=10)
         self.style_text_widget(self.output)
-        self.output.pack(fill=tk.BOTH, expand=False, padx=10, pady=(0, 4))
+        self.output.pack(fill=tk.BOTH, expand=False, padx=outer_padx, pady=(0, 4))
         self.output.insert(
             tk.END,
             "Select a dataset and click Start to stream the recording through the chart.",
         )
-
-        self.status = ttk.Label(
-            self,
-            textvariable=self.status_var,
-            style="StatusInfo.TLabel",
-            anchor=tk.W,
-        )
-        self.status.pack(fill=tk.X, padx=12, pady=(0, 12))
 
     def _build(self) -> None:
         try:

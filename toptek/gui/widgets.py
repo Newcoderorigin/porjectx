@@ -35,11 +35,37 @@ except Exception:  # pragma: no cover - defensive compatibility
                 f"{tab_name} is missing a callable '{attr}()' layout builder."
             )
 
-    def invoke_tab_builder(tab: object, *, attr: str = "_build") -> None:
+    def invoke_tab_builder(tab: object, *, attr: str = "_build") -> ttk.Frame | None:
         builder = getattr(tab, attr, None)
-        if not callable(builder):
-            raise MissingTabBuilderError(tab.__class__.__name__, attr)
-        builder()
+        if callable(builder):
+            builder()
+            return None
+        error = MissingTabBuilderError(tab.__class__.__name__, attr)
+        if isinstance(tab, tk.Misc):
+            placeholder = ttk.Frame(tab, style="DashboardBackground.TFrame")
+            placeholder.columnconfigure(0, weight=1)
+            ttk.Label(
+                placeholder,
+                text=f"{tab.__class__.__name__} upgrade required",
+                style="Surface.TLabel",
+                justify=tk.LEFT,
+                anchor=tk.W,
+            ).grid(row=0, column=0, sticky=tk.W, padx=16, pady=(18, 6))
+            ttk.Label(
+                placeholder,
+                text=(
+                    "This tab could not be initialised because its layout helper "
+                    "is missing. Please update to the latest ProjectX cockpit "
+                    "build and restart the application."
+                ),
+                style="Surface.TLabel",
+                wraplength=520,
+                justify=tk.LEFT,
+                anchor=tk.W,
+            ).grid(row=1, column=0, sticky=tk.W, padx=16, pady=(0, 18))
+            placeholder.pack(fill=tk.BOTH, expand=True)
+            return placeholder
+        raise error
 from .tradingview import TradingViewDefaults, TradingViewRouter
 
 
@@ -1152,13 +1178,13 @@ class TradingViewTab(BaseTab):
         tv_router: TradingViewRouter | None = None,
     ) -> None:
         super().__init__(master, configs, paths, tv_router=tv_router)
-        self.symbol_var = tk.StringVar()
-        self.interval_var = tk.StringVar()
-        self.theme_var = tk.StringVar()
-        self.locale_var = tk.StringVar()
+        self.symbol_var = tk.StringVar(master=self)
+        self.interval_var = tk.StringVar(master=self)
+        self.theme_var = tk.StringVar(master=self)
+        self.locale_var = tk.StringVar(master=self)
         self._status: ttk.Label | None = None
         self._hotkey_bound = False
-        self._build()
+        invoke_tab_builder(self)
         self._bind_hotkey()
 
     def destroy(self) -> None:  # pragma: no cover - Tk lifecycle
@@ -1330,7 +1356,7 @@ class TradingViewTab(BaseTab):
         self._stop_simulator()
         super().destroy()
 
-    def _build(self) -> None:
+    def _build_ui(self) -> None:
         controls = ttk.LabelFrame(
             self,
             text="Step 5 · Replay",
@@ -1449,6 +1475,23 @@ class TradingViewTab(BaseTab):
             anchor=tk.W,
         )
         self.status.pack(fill=tk.X, padx=12, pady=(0, 12))
+
+    def _build(self) -> None:
+        try:
+            self._build_ui()
+        except Exception as exc:  # pragma: no cover - defensive guardrail
+            self.logger.error("Replay layout unavailable", exc_info=exc)
+            ttk.Label(
+                self,
+                text=(
+                    "Replay controls unavailable. Update ProjectX to access "
+                    "the simulator workflow."
+                ),
+                style="Surface.TLabel",
+                wraplength=520,
+                justify=tk.LEFT,
+                anchor=tk.W,
+            ).pack(fill=tk.BOTH, expand=True, padx=16, pady=18)
 
     def _browse_dataset(self) -> None:
         current = Path(self.file_var.get()).expanduser()

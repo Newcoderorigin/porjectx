@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Tuple, TYPE_CHECKING, cast
 
@@ -75,6 +76,9 @@ def run_cli(
 
     lookback = int(args.lookback)
     df = data.sample_dataframe(lookback)
+    start = getattr(args, "start", None)
+    if start is not None:
+        df = _filter_dataframe_by_start(df, start)
     try:
         bundle = build_features(df, cache_dir=paths.cache)
     except ValueError as exc:
@@ -175,7 +179,11 @@ def parse_args(settings: "UIConfig") -> argparse.Namespace:
         type=int,
         help=f"Live chart frames per second (default: {settings.chart.fps})",
     )
-    parser.add_argument("--start", help="Start date for backtest")
+    parser.add_argument(
+        "--start",
+        type=_parse_start,
+        help="Start date for CLI workflows (ISO 8601)",
+    )
     return parser.parse_args()
 
 
@@ -206,6 +214,43 @@ def _apply_cli_overrides(
         shell=shell_updates if shell_updates else None,
         chart=chart_updates if chart_updates else None,
     )
+
+
+def _parse_start(value: str | None) -> datetime | None:
+    """Parse ``--start`` values into :class:`datetime` objects."""
+
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError as exc:  # pragma: no cover - argparse surfaces error
+        raise argparse.ArgumentTypeError(
+            f"Invalid ISO-8601 timestamp for --start: {value!r}"
+        ) from exc
+
+
+def _filter_dataframe_by_start(df, start: datetime):
+    """Return ``df`` with rows on/after ``start`` timestamp."""
+
+    import pandas as pd
+
+    start_ts = pd.Timestamp(start)
+    index = df.index
+    tz = getattr(index, "tz", None)
+    if tz is None:
+        if start_ts.tzinfo is not None:
+            start_ts = start_ts.tz_convert("UTC").tz_localize(None)
+    else:
+        if start_ts.tzinfo is None:
+            start_ts = start_ts.tz_localize(tz)
+        else:
+            start_ts = start_ts.tz_convert(tz)
+    return df.loc[df.index >= start_ts]
 
 
 def _guard_interpreter_version() -> None:

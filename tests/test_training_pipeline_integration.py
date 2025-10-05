@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -90,6 +91,54 @@ def test_cli_training_consumes_feature_bundle(monkeypatch, tmp_path, caplog) -> 
     assert captured["train_X"] is bundle.X
     assert captured["train_y"] is bundle.y
     assert "Feature pipeline dropped" not in caplog.text
+
+
+def test_cli_training_honours_start_date(monkeypatch, tmp_path) -> None:
+    bundle = FeatureBundle(
+        X=np.full((96, 3), fill_value=0.5, dtype=float),
+        y=np.tile(np.array([0, 1], dtype=np.int8), 48),
+        meta={"dropped_rows": 0, "mask": [1] * 96, "feature_names": []},
+    )
+
+    df = _sample_dataframe(140)
+    start = datetime(2024, 1, 1, 6, tzinfo=timezone.utc)
+    expected = df.loc[df.index >= pd.Timestamp(start)]
+
+    captured: dict[str, object] = {}
+
+    def fake_build_features(filtered_df, *, cache_dir, engine="pandas"):
+        captured["rows"] = len(filtered_df)
+        captured["first_index"] = filtered_df.index[0]
+        return bundle
+
+    def fake_train_classifier(X, y, **kwargs):
+        return SimpleNamespace(
+            model_path=tmp_path / "models" / "logistic.pkl",
+            metrics={"accuracy": 0.8},
+            threshold=0.5,
+        )
+
+    monkeypatch.setattr("toptek.main.data.sample_dataframe", lambda rows: df)
+    monkeypatch.setattr("toptek.main.build_features", fake_build_features)
+    monkeypatch.setattr("toptek.main.model.train_classifier", fake_train_classifier)
+
+    args = argparse.Namespace(
+        cli="train",
+        model="logistic",
+        symbol="ES",
+        timeframe="5m",
+        lookback=140,
+        start=start,
+    )
+    configs = {"risk": {}, "app": {}, "features": {}}
+    paths = utils.AppPaths(
+        root=tmp_path, cache=tmp_path / "cache", models=tmp_path / "models"
+    )
+
+    run_cli(args, configs, paths)
+
+    assert captured["rows"] == len(expected)
+    assert captured["first_index"] == expected.index[0]
 
 
 def test_train_tab_uses_feature_bundle(monkeypatch, tmp_path, caplog) -> None:

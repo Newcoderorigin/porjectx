@@ -83,6 +83,21 @@ class ProjectXGateway:
             "Content-Type": "application/json",
         }
 
+    @property
+    def base_url(self) -> str:
+        """Expose the configured base URL for downstream consumers."""
+
+        return self._config.base_url
+
+    def auth_headers(self) -> Dict[str, str]:
+        """Return authorization headers, refreshing the JWT if required."""
+
+        if not self._token:
+            self.login()
+        else:
+            self._validate()
+        return dict(self._headers)
+
     def _request(self, endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Send a POST request with automatic token validation."""
 

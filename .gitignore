@@ -8,3 +8,5 @@ data/
 models/
 reports/
 var/
+toptek/ui/web/node_modules/
+toptek/ui/web/dist/

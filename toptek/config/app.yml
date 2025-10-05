@@ -2,3 +2,7 @@ polling_interval_seconds: 5
 cache_directory: data/cache
 models_directory: models
 log_level: INFO
+web_frontend:
+  enabled: false
+  port: 5174
+  auto_open: false

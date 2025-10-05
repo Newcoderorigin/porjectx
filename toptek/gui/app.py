@@ -9,6 +9,7 @@ from typing import Callable, Dict, List
 from core import utils
 
 from . import DARK_PALETTE
+from .webshell import WebFrontendHandle, launch_web_frontend
 
 
 class ToptekApp(ttk.Notebook):
@@ -144,6 +145,25 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
     root = tk.Tk()
     root.title("Toptek Mission Control")
     root.geometry("1024x680")
+
+    web_handle: WebFrontendHandle | None = None
+    web_message: str | None = None
+    web_config = configs.get("web_frontend", {})
+    if isinstance(web_config, dict) and web_config.get("enabled"):
+        web_logger = utils.build_logger("WebFrontend")
+        port_value = web_config.get("port")
+        try:
+            port = int(port_value) if port_value is not None else None
+        except (TypeError, ValueError):
+            port = None
+        auto_value = web_config.get("auto_open")
+        if isinstance(auto_value, str):
+            auto_open = auto_value.lower() in {"1", "true", "yes", "on"}
+        else:
+            auto_open = bool(auto_value)
+        web_handle = launch_web_frontend(paths, port=port, auto_open=auto_open, logger=web_logger)
+        if web_handle is None:
+            web_message = "Web console assets missing. Run npm run build in toptek/ui/web."
 
     style = ttk.Style()
     try:
@@ -441,14 +461,29 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
 
     header = ttk.Frame(container, style="DashboardBackground.TFrame")
     header.pack(fill=tk.X, pady=(0, 12))
+
+    header_left = ttk.Frame(header, style="DashboardBackground.TFrame")
+    header_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
     ttk.Label(
-        header, text="Project X · Manual Trading Copilot", style="Header.TLabel"
+        header_left, text="Project X · Manual Trading Copilot", style="Header.TLabel"
     ).pack(anchor=tk.W)
     ttk.Label(
-        header,
+        header_left,
         text="Follow the guided workflow from credentials to Topstep-compliant trade plans.",
         style="SubHeader.TLabel",
     ).pack(anchor=tk.W)
+
+    if web_handle is not None:
+        ttk.Button(
+            header,
+            text="Open Web Console",
+            style="Accent.TButton",
+            command=web_handle.open,
+        ).pack(side=tk.RIGHT)
+    elif web_message:
+        ttk.Label(header, text=web_message, style="Muted.TLabel").pack(
+            side=tk.RIGHT, anchor=tk.E
+        )
 
     guidance_card = ttk.Labelframe(
         container, text="Mission Checklist", style="Guidance.TLabelframe"
@@ -477,7 +512,18 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
         progress.configure(maximum=float(tab_count - 1))
     notebook.initialise_guidance()
 
-    root.mainloop()
+    def _on_close() -> None:
+        if web_handle is not None:
+            web_handle.stop()
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", _on_close)
+
+    try:
+        root.mainloop()
+    finally:
+        if web_handle is not None:
+            web_handle.stop()
 
 
 __all__ = ["launch_app", "ToptekApp"]

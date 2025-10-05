@@ -1,4 +1,4 @@
-name: Smoke
+name: CI
 
 on:
   pull_request:
@@ -6,21 +6,29 @@ on:
     branches: ["main"]
 
 jobs:
-  smoke:
+  build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11"]
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
-      - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r toptek/requirements-lite.txt
-          pip install pytest
-      - name: Run smoke tests
-        run: |
-          chmod +x scripts/smoke.sh
-          ./scripts/smoke.sh
+          pip install pytest black ruff mypy
+      - name: Ruff
+        run: ruff check .
+      - name: Black
+        run: black --check .
+      - name: Pytest
+        run: pytest -q
+      - name: Mypy (informational)
+        continue-on-error: true
+        run: mypy .

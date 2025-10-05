@@ -1,0 +1,65 @@
+{
+  "config_path": "configs/config.yml",
+  "eligible": false,
+  "records": [
+    {
+      "cost_multiplier": 1.0348163776891686,
+      "eligible": false,
+      "max_drawdown": 0.14478654522818069,
+      "sharpe": 2.131275297280324,
+      "sortino": 3.4271020185146104,
+      "turnover": 1.00398406374502,
+      "window": "2019"
+    },
+    {
+      "cost_multiplier": 1.1380390854755436,
+      "eligible": true,
+      "max_drawdown": 0.24515628591949157,
+      "sharpe": 1.4378715828874629,
+      "sortino": 1.943400593813336,
+      "turnover": 0.9482071713147411,
+      "window": "2020"
+    },
+    {
+      "cost_multiplier": 1.036031111805284,
+      "eligible": false,
+      "max_drawdown": 0.2515217726473073,
+      "sharpe": 0.18593221348034022,
+      "sortino": 0.3020121704182415,
+      "turnover": 1.0119521912350598,
+      "window": "2021"
+    },
+    {
+      "cost_multiplier": 1.1162906974071314,
+      "eligible": false,
+      "max_drawdown": 0.17601811847617904,
+      "sharpe": 2.3722886649003434,
+      "sortino": 3.9953239242844365,
+      "turnover": 1.0199203187250996,
+      "window": "2022"
+    },
+    {
+      "cost_multiplier": 1.1998370085767163,
+      "eligible": false,
+      "max_drawdown": 0.15646026536685853,
+      "sharpe": 1.1704025240240794,
+      "sortino": 2.2732538718209208,
+      "turnover": 1.0358565737051793,
+      "window": "2023"
+    }
+  ],
+  "stress_tests": [
+    {
+      "cost_multiplier": 1.0,
+      "status": "pass"
+    },
+    {
+      "cost_multiplier": 2.0,
+      "status": "pass"
+    },
+    {
+      "cost_multiplier": 3.0,
+      "status": "pass"
+    }
+  ]
+}

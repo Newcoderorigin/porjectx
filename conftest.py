@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 import os
+import random
 import sys
 import threading
 import trace
-import json
 import types
 from pathlib import Path
 from typing import Iterable, List, Tuple
+
+try:
+    import numpy as np
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    np = None  # type: ignore[assignment]
 
 import pytest
 
@@ -138,6 +144,9 @@ def _coverage_for_module(
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_sessionstart(session: pytest.Session) -> None:
+    random.seed(1337)
+    if np is not None:
+        np.random.seed(1337)
     if _SKIP_TRACE_COVERAGE:
         return
     tracer = trace.Trace(

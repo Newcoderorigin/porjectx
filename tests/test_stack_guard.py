@@ -60,7 +60,7 @@ def patched_main(monkeypatch):
     )
     import toptek.main as main_module
 
-    def _fake_load_configs():
+    def _fake_load_configs(env=None):
         return {"app": {}, "risk": {}, "features": {}, "ui": {}}, _DummyUI()
 
     monkeypatch.setattr(main_module, "load_configs", _fake_load_configs)

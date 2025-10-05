@@ -10,6 +10,7 @@ from core import utils
 
 from . import DARK_PALETTE
 from .webshell import WebFrontendHandle, launch_web_frontend
+from .tradingview import TradingViewRouter
 
 
 class ToptekApp(ttk.Notebook):
@@ -30,49 +31,79 @@ class ToptekApp(ttk.Notebook):
         self._tab_names: List[str] = []
         self._tab_guidance: Dict[str, str] = {}
         self._tab_widgets: Dict[str, ttk.Frame] = {}
+        self._tv_router = TradingViewRouter(
+            configs.get("app", {}),
+            configs.get("ui", {}),
+        )
         self._build_tabs()
         self.bind("<<NotebookTabChanged>>", self._handle_tab_change)
 
     def _build_tabs(self) -> None:
         from . import widgets
 
+        router = self._tv_router
         tabs = [
             (
                 "Dashboard",
-                lambda parent: widgets.DashboardTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.DashboardTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Overview · Monitor readiness metrics before taking action.",
             ),
             (
                 "Login",
-                lambda parent: widgets.LoginTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.LoginTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 1 · Secure your API keys and verify environment access.",
             ),
             (
                 "Research",
-                lambda parent: widgets.ResearchTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.ResearchTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 2 · Explore market structure and feature snapshots.",
             ),
             (
                 "Train",
-                lambda parent: widgets.TrainTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.TrainTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 3 · Fit and calibrate models before risking capital.",
             ),
             (
                 "Backtest",
-                lambda parent: widgets.BacktestTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.BacktestTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 4 · Validate expectancy and drawdown resilience.",
             ),
             (
                 "Replay",
-                lambda parent: widgets.ReplayTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.ReplayTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 5 · Rehearse the playbook against recorded sessions before trading live.",
             ),
             (
                 "Trade",
-                lambda parent: widgets.TradeTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.TradeTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 6 · Check Topstep guardrails and plan manual execution.",
             ),
         ]
+
+        if router.enabled and router.is_tab_enabled("notebook"):
+            tabs.append(
+                (
+                    "TradingView",
+                    lambda parent, r=router: widgets.TradingViewTab(
+                        parent, self.configs, self.paths, tv_router=r
+                    ),
+                    "TradingView · Launch synced charts and respect attribution requirements.",
+                )
+            )
 
         lm_config = self.configs.get("lmstudio", {})
         if lm_config.get("enabled"):

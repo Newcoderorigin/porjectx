@@ -14,6 +14,11 @@ chart:
   fps: 12
   max_points: 180
   price_decimals: 2
+tradingview:
+  symbol: ES=F
+  interval: 5m
+  theme: dark
+  locale: en
 status:
   login:
     idle: "Awaiting verification"

@@ -8,6 +8,13 @@ from typing import Mapping
 
 from toptek.gui import DARK_PALETTE
 
+try:  # pragma: no cover - optional dependency
+    import ttkbootstrap as _ttkbootstrap
+except Exception:  # pragma: no cover - graceful fallback when absent
+    _ttkbootstrap = None
+
+BOOTSTRAP_AVAILABLE: bool = _ttkbootstrap is not None
+
 _THEME_TOKEN_MAP: Mapping[str, str] = {
     "dark": "superhero",
     "light": "flatly",
@@ -38,6 +45,9 @@ def get_window(theme: str | None):
     if ttkbootstrap is not None:
         themename = resolved or "superhero"
         return ttkbootstrap.Window(themename=themename)
+    if _ttkbootstrap is not None:
+        themename = resolved or "superhero"
+        return _ttkbootstrap.Window(themename=themename)
 
     root = tk.Tk()
     root.configure(background=DARK_PALETTE["canvas"])
@@ -48,6 +58,7 @@ def apply_base_spacing(root: tk.Misc) -> None:
     """Apply baseline spacing tweaks for classic Tk deployments."""
 
     if _import_ttkbootstrap() is not None:
+    if _ttkbootstrap is not None:
         return
 
     root.option_add("*TCombobox*Listbox.background", DARK_PALETTE["surface"])

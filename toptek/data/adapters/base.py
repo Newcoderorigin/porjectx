@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Mapping
 
 import pandas as pd
@@ -56,15 +56,7 @@ class OHLCVDataAdapter(ABC):
         if self._context is None:
             return
         cache = self._context.cache
-        start_utc = self._normalize_boundary(start)
-        end_utc = self._normalize_boundary(end)
-        key = CacheKey(
-            source=source,
-            symbol=symbol,
-            timeframe=timeframe,
-            start=start_utc,
-            end=end_utc,
-        )
+        key = CacheKey(source=source, symbol=symbol, timeframe=timeframe, start=start, end=end)
         cache.store(key, df)
 
     def _lookup_cache(
@@ -79,26 +71,8 @@ class OHLCVDataAdapter(ABC):
         if self._context is None:
             return None
         cache = self._context.cache
-        start_utc = self._normalize_boundary(start)
-        end_utc = self._normalize_boundary(end)
-        key = CacheKey(
-            source=source,
-            symbol=symbol,
-            timeframe=timeframe,
-            start=start_utc,
-            end=end_utc,
-        )
+        key = CacheKey(source=source, symbol=symbol, timeframe=timeframe, start=start, end=end)
         return cache.load(key)
-
-    @staticmethod
-    def _normalize_boundary(bound: datetime | None) -> datetime | None:
-        """Return a UTC-aware datetime for cache keys and filtering."""
-
-        if bound is None:
-            return None
-        if bound.tzinfo is None:
-            return bound.replace(tzinfo=timezone.utc)
-        return bound.astimezone(timezone.utc)
 
 
 def ensure_ohlcv_schema(df: pd.DataFrame) -> pd.DataFrame:

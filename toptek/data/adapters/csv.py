@@ -45,12 +45,10 @@ class CSVAdapter(OHLCVDataAdapter):
             index_col="ts",
         )
         df = ensure_ohlcv_schema(df)
-        start_utc = self._normalize_boundary(start)
-        end_utc = self._normalize_boundary(end)
-        if start_utc is not None:
-            df = df.loc[df.index >= start_utc]
-        if end_utc is not None:
-            df = df.loc[df.index <= end_utc]
+        if start is not None:
+            df = df.loc[df.index >= start]
+        if end is not None:
+            df = df.loc[df.index <= end]
         self._maybe_cache(
             df=df,
             symbol=symbol,

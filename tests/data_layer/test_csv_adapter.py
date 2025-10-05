@@ -1,9 +1,8 @@
 from __future__ import annotations
 
+import pytest
 from datetime import datetime, timezone
 from pathlib import Path
-
-import pytest
 
 pytest.importorskip("pandas")
 import pandas as pd
@@ -42,23 +41,6 @@ def test_fetch_reads_and_caches(tmp_path: Path) -> None:
     key = CacheKey(source="csv", symbol="ES=F", timeframe="1d", start=start, end=None)
     cached = cache.load(key)
     pd.testing.assert_frame_equal(cached, df)
-
-
-def test_fetch_accepts_naive_bounds(tmp_path: Path) -> None:
-    cache = OHLCVCache(tmp_path / "cache")
-    context = AdapterContext(cache=cache)
-    data_root = tmp_path / "data"
-    data_root.mkdir()
-    _write_sample_csv(data_root)
-    adapter = CSVAdapter(context, root=data_root)
-    start = datetime(2024, 1, 3)
-    df = adapter.fetch("ES=F", "1d", start=start)
-    assert len(df) == 2
-    assert df.index[0].tzinfo is not None
-    assert df.index[0] >= start.replace(tzinfo=timezone.utc)
-    # second call should hit cache even with naive boundary
-    again = adapter.fetch("ES=F", "1d", start=start)
-    pd.testing.assert_frame_equal(df, again)
 
 
 def test_fetch_with_custom_path(tmp_path: Path) -> None:

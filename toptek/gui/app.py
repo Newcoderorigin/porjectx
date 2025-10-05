@@ -9,7 +9,8 @@ from typing import Callable, Dict, List
 from core import utils
 
 from . import DARK_PALETTE
-from .builder import MissingTabBuilderError, build_missing_tab_placeholder
+from .webshell import WebFrontendHandle, launch_web_frontend
+from .tradingview import TradingViewRouter
 
 
 class ToptekApp(ttk.Notebook):
@@ -30,50 +31,79 @@ class ToptekApp(ttk.Notebook):
         self._tab_names: List[str] = []
         self._tab_guidance: Dict[str, str] = {}
         self._tab_widgets: Dict[str, ttk.Frame] = {}
-        self.logger = utils.build_logger(self.__class__.__name__)
+        self._tv_router = TradingViewRouter(
+            configs.get("app", {}),
+            configs.get("ui", {}),
+        )
         self._build_tabs()
         self.bind("<<NotebookTabChanged>>", self._handle_tab_change)
 
     def _build_tabs(self) -> None:
         from . import widgets
 
+        router = self._tv_router
         tabs = [
             (
                 "Dashboard",
-                lambda parent: widgets.DashboardTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.DashboardTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Overview · Monitor readiness metrics before taking action.",
             ),
             (
                 "Login",
-                lambda parent: widgets.LoginTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.LoginTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 1 · Secure your API keys and verify environment access.",
             ),
             (
                 "Research",
-                lambda parent: widgets.ResearchTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.ResearchTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 2 · Explore market structure and feature snapshots.",
             ),
             (
                 "Train",
-                lambda parent: widgets.TrainTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.TrainTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 3 · Fit and calibrate models before risking capital.",
             ),
             (
                 "Backtest",
-                lambda parent: widgets.BacktestTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.BacktestTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 4 · Validate expectancy and drawdown resilience.",
             ),
             (
                 "Replay",
-                lambda parent: widgets.ReplayTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.ReplayTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 5 · Rehearse the playbook against recorded sessions before trading live.",
             ),
             (
                 "Trade",
-                lambda parent: widgets.TradeTab(parent, self.configs, self.paths),
+                lambda parent, r=router: widgets.TradeTab(
+                    parent, self.configs, self.paths, tv_router=r
+                ),
                 "Step 6 · Check Topstep guardrails and plan manual execution.",
             ),
         ]
+
+        if router.enabled and router.is_tab_enabled("notebook"):
+            tabs.append(
+                (
+                    "TradingView",
+                    lambda parent, r=router: widgets.TradingViewTab(
+                        parent, self.configs, self.paths, tv_router=r
+                    ),
+                    "TradingView · Launch synced charts and respect attribution requirements.",
+                )
+            )
 
         lm_config = self.configs.get("lmstudio", {})
         if lm_config.get("enabled"):
@@ -154,6 +184,25 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
     root = tk.Tk()
     root.title("Toptek Mission Control")
     root.geometry("1024x680")
+
+    web_handle: WebFrontendHandle | None = None
+    web_message: str | None = None
+    web_config = configs.get("web_frontend", {})
+    if isinstance(web_config, dict) and web_config.get("enabled"):
+        web_logger = utils.build_logger("WebFrontend")
+        port_value = web_config.get("port")
+        try:
+            port = int(port_value) if port_value is not None else None
+        except (TypeError, ValueError):
+            port = None
+        auto_value = web_config.get("auto_open")
+        if isinstance(auto_value, str):
+            auto_open = auto_value.lower() in {"1", "true", "yes", "on"}
+        else:
+            auto_open = bool(auto_value)
+        web_handle = launch_web_frontend(paths, port=port, auto_open=auto_open, logger=web_logger)
+        if web_handle is None:
+            web_message = "Web console assets missing. Run npm run build in toptek/ui/web."
 
     style = ttk.Style()
     try:
@@ -451,14 +500,29 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
 
     header = ttk.Frame(container, style="DashboardBackground.TFrame")
     header.pack(fill=tk.X, pady=(0, 12))
+
+    header_left = ttk.Frame(header, style="DashboardBackground.TFrame")
+    header_left.pack(side=tk.LEFT, fill=tk.X, expand=True)
     ttk.Label(
-        header, text="Project X · Manual Trading Copilot", style="Header.TLabel"
+        header_left, text="Project X · Manual Trading Copilot", style="Header.TLabel"
     ).pack(anchor=tk.W)
     ttk.Label(
-        header,
+        header_left,
         text="Follow the guided workflow from credentials to Topstep-compliant trade plans.",
         style="SubHeader.TLabel",
     ).pack(anchor=tk.W)
+
+    if web_handle is not None:
+        ttk.Button(
+            header,
+            text="Open Web Console",
+            style="Accent.TButton",
+            command=web_handle.open,
+        ).pack(side=tk.RIGHT)
+    elif web_message:
+        ttk.Label(header, text=web_message, style="Muted.TLabel").pack(
+            side=tk.RIGHT, anchor=tk.E
+        )
 
     guidance_card = ttk.Labelframe(
         container, text="Mission Checklist", style="Guidance.TLabelframe"
@@ -487,7 +551,18 @@ def launch_app(*, configs: Dict[str, Dict[str, object]], paths: utils.AppPaths) 
         progress.configure(maximum=float(tab_count - 1))
     notebook.initialise_guidance()
 
-    root.mainloop()
+    def _on_close() -> None:
+        if web_handle is not None:
+            web_handle.stop()
+        root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", _on_close)
+
+    try:
+        root.mainloop()
+    finally:
+        if web_handle is not None:
+            web_handle.stop()
 
 
 __all__ = ["launch_app", "ToptekApp"]

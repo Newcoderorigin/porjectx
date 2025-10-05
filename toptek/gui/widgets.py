@@ -22,7 +22,7 @@ from toptek.risk import GuardReport, RiskEngine
 from toptek.replay import ReplayBar, ReplaySimulator
 
 from . import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
-from .builder import invoke_tab_builder
+from .tradingview import TradingViewDefaults, TradingViewRouter
 
 
 T = TypeVar("T")
@@ -36,12 +36,15 @@ class BaseTab(ttk.Frame):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
         super().__init__(master, style="DashboardBackground.TFrame")
         self.configs = configs
         self._ui_config = configs.get("ui", {})
         self.paths = paths
         self.logger = utils.build_logger(self.__class__.__name__)
+        self.tv_router = tv_router
 
     def style_text_widget(self, widget: tk.Text) -> None:
         """Apply the shared dark theme to ``tk.Text`` widgets."""
@@ -75,6 +78,68 @@ class BaseTab(ttk.Frame):
             if data is None:
                 return default
         return cast(T, data)
+
+    def tradingview_defaults(self) -> TradingViewDefaults:
+        base = (
+            self.tv_router.defaults()
+            if self.tv_router and self.tv_router.enabled
+            else TradingViewDefaults(
+                symbol="ES=F", interval="5m", theme="dark", locale="en"
+            )
+        )
+        stored = self.configs.get("tradingview")
+        if isinstance(stored, dict):
+            symbol = str(stored.get("symbol", base.symbol) or base.symbol)
+            interval = str(stored.get("interval", base.interval) or base.interval)
+            theme = str(stored.get("theme", base.theme) or base.theme)
+            locale = str(stored.get("locale", base.locale) or base.locale)
+            return TradingViewDefaults(
+                symbol=symbol,
+                interval=interval,
+                theme=theme,
+                locale=locale,
+            )
+        return base
+
+    def _open_tradingview(
+        self,
+        *,
+        symbol: str | None = None,
+        interval: str | None = None,
+        theme: str | None = None,
+        locale: str | None = None,
+    ) -> str | None:
+        if not self.tv_router or not self.tv_router.enabled:
+            messagebox.showinfo(
+                "TradingView disabled",
+                "Enable the TradingView integration in config/app.yml to launch charts.",
+            )
+            return None
+        defaults = self.tradingview_defaults()
+        resolved_symbol = symbol or defaults.symbol
+        resolved_interval = interval or defaults.interval
+        resolved_theme = theme or defaults.theme
+        resolved_locale = locale or defaults.locale
+        try:
+            url = self.tv_router.launch(
+                symbol=resolved_symbol,
+                interval=resolved_interval,
+                theme=resolved_theme,
+                locale=resolved_locale,
+            )
+        except RuntimeError as exc:
+            messagebox.showwarning("TradingView", str(exc))
+            return None
+        payload = {
+            "symbol": resolved_symbol,
+            "interval": resolved_interval,
+            "theme": resolved_theme,
+            "locale": resolved_locale,
+            "url": url,
+        }
+        self.update_section("tradingview", payload)
+        self.log_event(f"TradingView launch → {url}")
+        return url
 
 
 class LiveChart(ttk.Frame):
@@ -204,6 +269,8 @@ class DashboardTab(BaseTab):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
         self.workflow_value = tk.StringVar()
         self.workflow_caption = tk.StringVar()
@@ -212,8 +279,8 @@ class DashboardTab(BaseTab):
         self.training_value = tk.StringVar()
         self.training_caption = tk.StringVar()
         self.chart_summary = tk.StringVar()
-        super().__init__(master, configs, paths)
-        invoke_tab_builder(self)
+        super().__init__(master, configs, paths, tv_router=tv_router)
+        self._build()
         self._refresh_metrics()
 
     def _build(self) -> None:
@@ -371,9 +438,11 @@ class LoginTab(BaseTab):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
-        super().__init__(master, configs, paths)
-        invoke_tab_builder(self)
+        super().__init__(master, configs, paths, tv_router=tv_router)
+        self._build()
 
     def _build(self) -> None:
         intro = ttk.LabelFrame(
@@ -476,11 +545,14 @@ class ResearchTab(BaseTab):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
-        super().__init__(master, configs, paths)
-        invoke_tab_builder(self)
+        super().__init__(master, configs, paths, tv_router=tv_router)
+        self._build()
 
     def _build(self) -> None:
+        self._tv_status: ttk.Label | None = None
         controls = ttk.LabelFrame(
             self,
             text="Step 2 · Research console",
@@ -542,6 +614,27 @@ class ResearchTab(BaseTab):
 
         controls.columnconfigure(1, weight=1)
 
+        if self.tv_router and self.tv_router.is_tab_enabled("research"):
+            ttk.Button(
+                controls,
+                text="Open TradingView chart (Ctrl+Shift+T)",
+                style="Neutral.TButton",
+                command=self._open_research_tradingview,
+            ).grid(row=3, column=0, columnspan=4, sticky=tk.W, pady=(12, 0))
+            defaults = self.tradingview_defaults()
+            hint = (
+                f"Launches TradingView with {defaults.symbol} at {defaults.interval} "
+                "unless you override the symbol/timeframe above."
+            )
+            self._tv_status = ttk.Label(
+                controls,
+                text=hint,
+                style="MetricCaption.TLabel",
+                wraplength=520,
+                justify=tk.LEFT,
+            )
+            self._tv_status.grid(row=4, column=0, columnspan=4, sticky=tk.W, pady=(6, 0))
+
         self.text = tk.Text(self, height=18)
         self.style_text_widget(self.text)
         self.text.pack(fill=tk.BOTH, expand=True, padx=10, pady=(6, 4))
@@ -559,6 +652,24 @@ class ResearchTab(BaseTab):
         df = sample_dataframe(bars)
         self.text.delete("1.0", tk.END)
         self.text.insert(tk.END, df.tail(12).to_string())
+        if self._tv_status is not None:
+            symbol = self.symbol_var.get()
+            interval = self.timeframe_var.get()
+            self._tv_status.config(
+                text=(
+                    f"Latest sample pulled for {symbol} ({interval}). "
+                    "Use the TradingView button to mirror the selection."
+                )
+            )
+
+    def _open_research_tradingview(self) -> None:
+        symbol = str(self.symbol_var.get())
+        interval = str(self.timeframe_var.get())
+        url = self._open_tradingview(symbol=symbol, interval=interval)
+        if url and self._tv_status is not None:
+            self._tv_status.config(
+                text=f"Opened TradingView for {symbol} ({interval}). URL copied to logs."
+            )
 
         feat_map = features.compute_features(df)
         latest = -1
@@ -606,9 +717,11 @@ class TrainTab(BaseTab):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
-        super().__init__(master, configs, paths)
-        invoke_tab_builder(self)
+        super().__init__(master, configs, paths, tv_router=tv_router)
+        self._build()
 
     def _build(self) -> None:
         config = ttk.LabelFrame(
@@ -849,9 +962,11 @@ class BacktestTab(BaseTab):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
-        super().__init__(master, configs, paths)
-        invoke_tab_builder(self)
+        super().__init__(master, configs, paths, tv_router=tv_router)
+        self._build()
 
     def _build(self) -> None:
         controls = ttk.LabelFrame(
@@ -959,6 +1074,8 @@ class ReplayTab(BaseTab):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
         self.file_var = tk.StringVar()
         self.format_var = tk.StringVar(value="auto")
@@ -975,7 +1092,7 @@ class ReplayTab(BaseTab):
         self._poll_interval = 100
         self._chart: LiveChart | None = None
         self._price_decimals = 2
-        super().__init__(master, configs, paths)
+        super().__init__(master, configs, paths, tv_router=tv_router)
         self._price_decimals = int(
             self.ui_setting("chart", "price_decimals", default=2)
         )
@@ -992,6 +1109,193 @@ class ReplayTab(BaseTab):
             16, int(1000 / int(self.ui_setting("chart", "fps", default=12)))
         )
         invoke_tab_builder(self)
+
+class TradingViewTab(BaseTab):
+    """Dedicated tab exposing TradingView launch controls."""
+
+    _HOTKEY = "<Control-Shift-T>"
+
+    def __init__(
+        self,
+        master: ttk.Notebook,
+        configs: Dict[str, Dict[str, object]],
+        paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
+    ) -> None:
+        super().__init__(master, configs, paths, tv_router=tv_router)
+        self.symbol_var = tk.StringVar()
+        self.interval_var = tk.StringVar()
+        self.theme_var = tk.StringVar()
+        self.locale_var = tk.StringVar()
+        self._status: ttk.Label | None = None
+        self._hotkey_bound = False
+        self._build()
+        self._bind_hotkey()
+
+    def destroy(self) -> None:  # pragma: no cover - Tk lifecycle
+        self._unbind_hotkey()
+        super().destroy()
+
+    def _bind_hotkey(self) -> None:
+        if self._hotkey_bound:
+            return
+        self.bind_all(self._HOTKEY, self._handle_hotkey, add="+")
+        self._hotkey_bound = True
+
+    def _unbind_hotkey(self) -> None:
+        if not self._hotkey_bound:
+            return
+        self.unbind_all(self._HOTKEY)
+        self._hotkey_bound = False
+
+    def _build(self) -> None:
+        defaults = self.tradingview_defaults()
+        self.symbol_var.set(defaults.symbol)
+        self.interval_var.set(defaults.interval)
+        self.theme_var.set(defaults.theme)
+        self.locale_var.set(defaults.locale)
+
+        frame = ttk.LabelFrame(
+            self,
+            text="TradingView launchpad",
+            style="Section.TLabelframe",
+        )
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=(12, 12))
+
+        if not self.tv_router or not self.tv_router.enabled:
+            ttk.Label(
+                frame,
+                text=(
+                    "Set tv.enabled: true in config/app.yml or TOPTEK_TV_ENABLED=1 in "
+                    ".env to activate TradingView integration."
+                ),
+                wraplength=540,
+                justify=tk.LEFT,
+                style="MetricCaption.TLabel",
+            ).pack(anchor=tk.W, pady=6)
+            return
+
+        control_grid = ttk.Frame(frame, style="DashboardBackground.TFrame")
+        control_grid.pack(fill=tk.X, pady=(6, 12))
+        ttk.Label(control_grid, text="Symbol", style="Surface.TLabel").grid(
+            row=0, column=0, sticky=tk.W, pady=(0, 6)
+        )
+        ttk.Entry(
+            control_grid,
+            textvariable=self.symbol_var,
+            width=16,
+            style="Input.TEntry",
+        ).grid(row=0, column=1, sticky=tk.W, pady=(0, 6), padx=(6, 12))
+
+        ttk.Label(control_grid, text="Interval", style="Surface.TLabel").grid(
+            row=0, column=2, sticky=tk.W, pady=(0, 6)
+        )
+        ttk.Entry(
+            control_grid,
+            textvariable=self.interval_var,
+            width=10,
+            style="Input.TEntry",
+        ).grid(row=0, column=3, sticky=tk.W, pady=(0, 6), padx=(6, 0))
+
+        ttk.Label(control_grid, text="Theme", style="Surface.TLabel").grid(
+            row=1, column=0, sticky=tk.W
+        )
+        ttk.Combobox(
+            control_grid,
+            textvariable=self.theme_var,
+            values=("dark", "light"),
+            state="readonly",
+            width=12,
+            style="Input.TCombobox",
+        ).grid(row=1, column=1, sticky=tk.W, padx=(6, 12))
+
+        ttk.Label(control_grid, text="Locale", style="Surface.TLabel").grid(
+            row=1, column=2, sticky=tk.W
+        )
+        ttk.Entry(
+            control_grid,
+            textvariable=self.locale_var,
+            width=10,
+            style="Input.TEntry",
+        ).grid(row=1, column=3, sticky=tk.W, padx=(6, 0))
+
+        favourites = self.tv_router.favorites if self.tv_router else []
+        if favourites:
+            ttk.Label(
+                control_grid, text="Favorites", style="Surface.TLabel"
+            ).grid(row=2, column=0, sticky=tk.W, pady=(8, 0))
+            fav_combo = ttk.Combobox(
+                control_grid,
+                values=[item["label"] for item in favourites],
+                state="readonly",
+                width=28,
+                style="Input.TCombobox",
+            )
+            fav_combo.grid(row=2, column=1, columnspan=3, sticky=tk.W, padx=(6, 0), pady=(8, 0))
+
+            def _apply_favorite(_: tk.Event) -> None:
+                selection = fav_combo.current()
+                if selection < 0:
+                    return
+                entry = favourites[selection]
+                self.symbol_var.set(entry["symbol"])
+                self.interval_var.set(entry["interval"])
+
+            fav_combo.bind("<<ComboboxSelected>>", _apply_favorite, add="+")
+
+        ttk.Button(
+            frame,
+            text="Launch TradingView (Ctrl+Shift+T)",
+            style="Accent.TButton",
+            command=self._open_tradingview_tab,
+        ).pack(anchor=tk.W, padx=4, pady=(6, 0))
+
+        ttk.Label(
+            frame,
+            text=(
+                "TradingView data is provided under their Terms of Service. Always "
+                "display the attribution footer and confirm symbols manually before "
+                "placing orders."
+            ),
+            wraplength=560,
+            justify=tk.LEFT,
+            style="MetricCaption.TLabel",
+        ).pack(anchor=tk.W, padx=4, pady=(8, 0))
+
+        ttk.Label(
+            frame,
+            text=(
+                "Tip: Use the Trading tab or Research tab buttons to keep symbol "
+                "and interval selections synced across the workflow."
+            ),
+            wraplength=560,
+            justify=tk.LEFT,
+            style="MetricCaption.TLabel",
+        ).pack(anchor=tk.W, padx=4, pady=(4, 0))
+
+        self._status = ttk.Label(
+            frame,
+            text="Press the launch button or Ctrl+Shift+T to open TradingView.",
+            style="StatusInfo.TLabel",
+        )
+        self._status.pack(anchor=tk.W, padx=4, pady=(10, 0))
+
+    def _open_tradingview_tab(self) -> None:
+        url = self._open_tradingview(
+            symbol=self.symbol_var.get(),
+            interval=self.interval_var.get(),
+            theme=self.theme_var.get(),
+            locale=self.locale_var.get(),
+        )
+        if url and self._status is not None:
+            self._status.config(
+                text=f"TradingView launched. Review the browser window at {url}."
+            )
+
+    def _handle_hotkey(self, _: tk.Event) -> str:
+        self._open_tradingview_tab()
+        return "break"
 
     def destroy(self) -> None:
         self._cancel_poll()
@@ -1338,8 +1642,10 @@ class TradeTab(BaseTab):
         master: ttk.Notebook,
         configs: Dict[str, Dict[str, object]],
         paths: utils.AppPaths,
+        *,
+        tv_router: TradingViewRouter | None = None,
     ) -> None:
-        super().__init__(master, configs, paths)
+        super().__init__(master, configs, paths, tv_router=tv_router)
         self.configs.setdefault("trade", {})
         guard_pending = self.ui_setting(
             "status", "guard", "pending", default="Topstep Guard: pending review"
@@ -1376,6 +1682,7 @@ class TradeTab(BaseTab):
         self._panic_bound = False
 
     def _build(self) -> None:
+        self._tv_status: ttk.Label | None = None
         intro = ttk.LabelFrame(
             self,
             text="Step 6 · Execution guard",
@@ -1442,6 +1749,22 @@ class TradeTab(BaseTab):
             style="Neutral.TButton",
             command=self._panic_to_paper,
         ).pack(side=tk.LEFT, padx=(8, 0))
+
+        if self.tv_router and self.tv_router.is_tab_enabled("trade"):
+            ttk.Button(
+                controls,
+                text="Open TradingView (Ctrl+Shift+T)",
+                style="Neutral.TButton",
+                command=self._open_trade_tradingview,
+            ).pack(side=tk.LEFT, padx=(8, 0))
+            self._tv_status = ttk.Label(
+                self,
+                text="Use TradingView to verify price context before executing.",
+                style="MetricCaption.TLabel",
+                wraplength=540,
+                justify=tk.LEFT,
+            )
+            self._tv_status.pack(fill=tk.X, padx=12, pady=(0, 6))
 
         self.output = tk.Text(self, height=12)
         self.style_text_widget(self.output)
@@ -1524,6 +1847,17 @@ class TradeTab(BaseTab):
             self._show_guard_dialog(report)
         return report
 
+    def _open_trade_tradingview(self) -> None:
+        defaults = self.tradingview_defaults()
+        url = self._open_tradingview(symbol=defaults.symbol, interval=defaults.interval)
+        if url and self._tv_status is not None:
+            self._tv_status.config(
+                text=(
+                    f"TradingView launched with {defaults.symbol} ({defaults.interval}). "
+                    "Confirm guards before placing orders."
+                )
+            )
+
     def _show_guard_dialog(self, report: GuardReport) -> None:
         lines = [
             f"Suggested contracts: {report.suggested_contracts}",
@@ -1576,5 +1910,6 @@ __all__ = [
     "TrainTab",
     "BacktestTab",
     "ReplayTab",
+    "TradingViewTab",
     "TradeTab",
 ]

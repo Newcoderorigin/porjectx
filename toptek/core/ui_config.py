@@ -179,6 +179,37 @@ class AppearanceSettings:
 
 
 @dataclass(frozen=True)
+class TradingViewSettings:
+    """Defaults for TradingView launch parameters."""
+
+    symbol: str = "ES=F"
+    interval: str = "5m"
+    theme: str = "dark"
+    locale: str = "en"
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> "TradingViewSettings":
+        return cls(
+            symbol=_coerce_str(data.get("symbol", cls.symbol), "tradingview.symbol"),
+            interval=_coerce_str(data.get("interval", cls.interval), "tradingview.interval"),
+            theme=_coerce_str(data.get("theme", cls.theme), "tradingview.theme"),
+            locale=_coerce_str(data.get("locale", cls.locale), "tradingview.locale"),
+        )
+
+    def apply_environment(self, env: Mapping[str, str]) -> "TradingViewSettings":
+        updates: Dict[str, Any] = {}
+        if env.get("TOPTEK_TV_SYMBOL"):
+            updates["symbol"] = env["TOPTEK_TV_SYMBOL"]
+        if env.get("TOPTEK_TV_INTERVAL"):
+            updates["interval"] = env["TOPTEK_TV_INTERVAL"]
+        if env.get("TOPTEK_TV_THEME"):
+            updates["theme"] = env["TOPTEK_TV_THEME"]
+        if env.get("TOPTEK_TV_LOCALE"):
+            updates["locale"] = env["TOPTEK_TV_LOCALE"]
+        return replace(self, **updates) if updates else self
+
+
+@dataclass(frozen=True)
 class LoginStatus:
     idle: str = "Awaiting verification"
     saved: str = "Saved. Run verification to confirm access."
@@ -298,6 +329,7 @@ class UIConfig:
     appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
     shell: ShellSettings = field(default_factory=ShellSettings)
     chart: ChartSettings = field(default_factory=ChartSettings)
+    tradingview: TradingViewSettings = field(default_factory=TradingViewSettings)
     status: StatusMessages = field(default_factory=StatusMessages)
 
     @classmethod
@@ -306,6 +338,7 @@ class UIConfig:
             appearance=AppearanceSettings.from_mapping(data.get("appearance", {})),
             shell=ShellSettings.from_mapping(data.get("shell", {})),
             chart=ChartSettings.from_mapping(data.get("chart", {})),
+            tradingview=TradingViewSettings.from_mapping(data.get("tradingview", {})),
             status=StatusMessages.from_mapping(data.get("status", {})),
         )
 
@@ -315,6 +348,7 @@ class UIConfig:
             appearance=self.appearance.apply_environment(env),
             shell=self.shell.apply_environment(env),
             chart=self.chart.apply_environment(env),
+            tradingview=self.tradingview.apply_environment(env),
         )
 
     def with_updates(
@@ -323,6 +357,7 @@ class UIConfig:
         appearance: Dict[str, Any] | None = None,
         shell: Dict[str, Any] | None = None,
         chart: Dict[str, Any] | None = None,
+        tradingview: Dict[str, Any] | None = None,
     ) -> "UIConfig":
         """Return a copy of the config with provided section overrides."""
 
@@ -333,6 +368,8 @@ class UIConfig:
             updates["shell"] = replace(self.shell, **shell)
         if chart:
             updates["chart"] = replace(self.chart, **chart)
+        if tradingview:
+            updates["tradingview"] = replace(self.tradingview, **tradingview)
         return replace(self, **updates) if updates else self
 
     def as_dict(self) -> Dict[str, Any]:
@@ -340,6 +377,7 @@ class UIConfig:
             "appearance": asdict(self.appearance),
             "shell": asdict(self.shell),
             "chart": asdict(self.chart),
+            "tradingview": asdict(self.tradingview),
             "status": asdict(self.status),
         }
 

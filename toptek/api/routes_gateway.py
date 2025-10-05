@@ -33,10 +33,12 @@ class RateLimiter:
     min_interval_seconds: float = 0.25
 
     def __post_init__(self) -> None:
-        self._lock = asyncio.Lock()
+        self._lock: asyncio.Lock | None = None
         self._last_call = 0.0
 
     async def __aenter__(self) -> None:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
         await self._lock.acquire()
         now = time.monotonic()
         delay = self.min_interval_seconds - (now - self._last_call)
@@ -45,6 +47,8 @@ class RateLimiter:
         self._last_call = time.monotonic()
 
     async def __aexit__(self, exc_type, exc, tb) -> bool:
+        if self._lock is None:
+            raise RuntimeError("RateLimiter lock missing during release")
         self._lock.release()
         return False
 
@@ -77,8 +81,10 @@ def _headers_from_request(request: Request | None) -> Mapping[str, str]:
 async def _call_gateway(
     func: Callable[[Dict[str, Any]], Dict[str, Any]],
     payload: Dict[str, Any],
-    limiter: RateLimiter,
+    limiter: RateLimiter | None,
 ) -> Dict[str, Any]:
+    if limiter is None:
+        return await asyncio.to_thread(func, payload)
     async with limiter:
         return await asyncio.to_thread(func, payload)
 

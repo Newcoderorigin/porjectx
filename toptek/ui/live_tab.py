@@ -12,10 +12,18 @@ except ModuleNotFoundError:  # pragma: no cover - headless environments
     ttk = None  # type: ignore[assignment]
 
 from toptek import filters
-from toptek.data import connect, run_migrations
+try:  # pragma: no cover - optional dependency surface
+    from toptek.data import connect, run_migrations
+except ModuleNotFoundError:  # pragma: no cover - minimal fallback for tests
+    connect = None  # type: ignore[assignment]
+    run_migrations = None  # type: ignore[assignment]
 from toptek.gui import DARK_PALETTE, TEXT_WIDGET_DEFAULTS
 from toptek.lmstudio import LMStudioClient, build_client
-from toptek.model.metrics import MetricsAPI
+
+try:  # pragma: no cover - optional dependency surface
+    from toptek.model.metrics import MetricsAPI
+except ModuleNotFoundError:  # pragma: no cover - degrade gracefully when pandas absent
+    MetricsAPI = None  # type: ignore[assignment]
 
 
 _BaseFrame = ttk.Frame if ttk is not None else object
@@ -23,6 +31,8 @@ _BaseFrame = ttk.Frame if ttk is not None else object
 
 def _fetch_signal_metrics(symbols: Sequence[str]) -> Dict[str, Mapping[str, object]]:
     if not symbols:
+        return {}
+    if connect is None or run_migrations is None or MetricsAPI is None:
         return {}
     conn = connect()
     try:

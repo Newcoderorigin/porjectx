@@ -88,6 +88,15 @@ if "yaml" not in sys.modules:
     sys.modules["yaml"] = yaml_stub
 
 
+@pytest.fixture(autouse=True)
+def _gateway_env_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PX_BASE_URL", "https://gateway-api.example.com/api")
+    monkeypatch.setenv("PX_MARKET_HUB", "https://gateway-rtc.example.com/hubs/market")
+    monkeypatch.setenv("PX_USER_HUB", "https://gateway-rtc.example.com/hubs/user")
+    monkeypatch.setenv("PX_USERNAME", "bot-user")
+    monkeypatch.setenv("PX_API_KEY", "unit-test-key")
+
+
 def _code_lines(path: Path) -> set[int]:
     lines: set[int] = set()
     in_docstring = False

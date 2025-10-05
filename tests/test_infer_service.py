@@ -114,3 +114,66 @@ def test_prediction_service_updates_metrics(tmp_path: Path) -> None:
 
     service.close()
     conn.close()
+
+
+def test_prediction_service_run_once_without_new_bars(tmp_path: Path) -> None:
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+
+    calibrator = _StubCalibrator()
+    with (models_dir / "calibrator.pkl").open("wb") as handle:
+        pickle.dump(calibrator, handle)
+    card = {
+        "feature_names": [
+            "sma_10",
+            "sma_20",
+            "ema_12",
+            "ema_26",
+            "rsi_14",
+        ],
+        "features_hash": "integration",
+        "versions": {"model": "stub-v1"},
+    }
+    (models_dir / "model_card.json").write_text(json.dumps(card), encoding="utf-8")
+
+    conn = sqlite3.connect(tmp_path / "predictions.db")
+    conn.row_factory = sqlite3.Row
+    run_migrations(conn)
+
+    feed = SQLiteBarFeed(conn)
+    symbol = "ESZ25"
+    all_records = _generate_bars(symbol, 48)
+    feed.insert(all_records[:32])
+
+    config = InferConfig(models_dir=models_dir, symbols=(symbol,), decision_threshold=0.55, max_history=256)
+    service = PredictionService(config, conn=conn)
+
+    first_pass = service.run_once()
+    assert symbol in first_pass and first_pass[symbol]
+
+    predictions_before = pd.read_sql_query(
+        "SELECT * FROM model_predictions WHERE symbol = ? ORDER BY ts", conn, params=(symbol,)
+    )
+    assert not predictions_before.empty
+
+    traced: list[str] = []
+
+    def _collector(statement: str) -> None:
+        traced.append(statement)
+
+    conn.set_trace_callback(_collector)
+    try:
+        second_pass = service.run_once()
+    finally:
+        conn.set_trace_callback(None)
+
+    assert second_pass == {}
+
+    predictions_after = pd.read_sql_query(
+        "SELECT * FROM model_predictions WHERE symbol = ? ORDER BY ts", conn, params=(symbol,)
+    )
+    assert len(predictions_after) == len(predictions_before)
+    assert not any(stmt.lstrip().upper().startswith("INSERT") for stmt in traced)
+
+    service.close()
+    conn.close()

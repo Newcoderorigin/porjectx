@@ -42,16 +42,34 @@ def _patch_bootstrap_keywords() -> None:
     """Prevent ttkbootstrap from mis-detecting our custom style names."""
 
     try:  # pragma: no cover - optional dependency
-        from ttkbootstrap.style import Keywords  # type: ignore
+        from ttkbootstrap.style import Keywords, StyleBuilderTTK  # type: ignore
     except Exception:  # pragma: no cover - defensive
         return
 
     if getattr(Keywords, "_toptek_background_patch", False):
         return
 
-    Keywords.TYPE_PATTERN = re.compile(
-        "outline|link|inverse|\\bround\\b|square|striped|focus|input|date|metersubtxt|meter|table"
+    tokens = [
+        "outline",
+        "link",
+        "inverse",
+    ]
+    if hasattr(StyleBuilderTTK, "create_round_frame_style"):
+        tokens.append(r"\\bround\\b")
+    tokens.extend(
+        [
+            "square",
+            "striped",
+            "focus",
+            "input",
+            "date",
+            "metersubtxt",
+            "meter",
+            "table",
+        ]
     )
+
+    Keywords.TYPE_PATTERN = re.compile("|".join(tokens))
     Keywords._toptek_background_patch = True
 
 
@@ -78,8 +96,7 @@ def get_window(theme: str | None):
 def apply_base_spacing(root: tk.Misc) -> None:
     """Apply baseline spacing tweaks for classic Tk deployments."""
 
-    if _import_ttkbootstrap() is not None:
-    if _ttkbootstrap is not None:
+    if _import_ttkbootstrap() is not None or _ttkbootstrap is not None:
         return
 
     root.option_add("*TCombobox*Listbox.background", DARK_PALETTE["surface"])

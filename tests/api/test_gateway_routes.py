@@ -7,7 +7,7 @@ import pytest
 
 from toptek.ai_server._fastapi_stub import FastAPI, HTTPException
 from toptek.api.models import GatewaySettings, RequiredGatewayEnv, load_gateway_settings
-from toptek.api.routes_gateway import register_gateway_routes
+from toptek.api.routes_gateway import RateLimiter, register_gateway_routes
 
 
 class DummyGateway:
@@ -57,6 +57,17 @@ class LiveStub:
                 stub.closed.append((base_url, hub_path))
 
         return _Handle()
+
+
+def test_rate_limiter_lazy_lock_instantiation() -> None:
+    limiter = RateLimiter()
+
+    async def _use_limiter() -> None:
+        async with limiter:
+            pass
+
+    asyncio.run(_use_limiter())
+    assert limiter._lock is not None
 
 
 def _settings() -> GatewaySettings:

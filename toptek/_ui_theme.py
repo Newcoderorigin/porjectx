@@ -71,6 +71,27 @@ def _patch_bootstrap_keywords() -> None:
         return
 
     Keywords.TYPE_PATTERN = re.compile("|".join(supported_tokens))
+    tokens = [
+        "outline",
+        "link",
+        "inverse",
+    ]
+    if hasattr(StyleBuilderTTK, "create_round_frame_style"):
+        tokens.append(r"\\bround\\b")
+    tokens.extend(
+        [
+            "square",
+            "striped",
+            "focus",
+            "input",
+            "date",
+            "metersubtxt",
+            "meter",
+            "table",
+        ]
+    )
+
+    Keywords.TYPE_PATTERN = re.compile("|".join(tokens))
     Keywords._toptek_background_patch = True
 
 
